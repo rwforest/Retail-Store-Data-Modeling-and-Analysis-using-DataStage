@@ -1,0 +1,13 @@
+"SupplierID","SupplierName","Country","LeadTimeDays","ReliabilityScore"
+"SUP01","Supplier_01","India",18,0.91
+"SUP02","Supplier_02","Poland",19,0.88
+"SUP03","Supplier_03","Turkey",10,0.79
+"SUP04","Supplier_04","Vietnam",27,0.95
+"SUP05","Supplier_05","Portugal",20,0.94
+"SUP06","Supplier_06","China",19,0.75
+"SUP07","Supplier_07","India",42,0.92
+"SUP08","Supplier_08","Poland",28,0.94
+"SUP09","Supplier_09","Turkey",21,0.81
+"SUP10","Supplier_10","Vietnam",31,0.79
+"SUP11","Supplier_11","Portugal",17,0.82
+"SUP12","Supplier_12","China",39,0.94

@@ -1,0 +1,459 @@
+{
+  "project": "RetailDW",
+  "nodes": [
+    {
+      "name": "act_Prepare_Dirs",
+      "kind": "exec",
+      "deps": [],
+      "command": "mkdir -p #pStgDir# #pDwhDir# #pMartDir# #pAuditDir#"
+    },
+    {
+      "name": "wff_Source_Orders",
+      "kind": "wait",
+      "deps": [
+        [
+          "act_Prepare_Dirs",
+          "ok"
+        ]
+      ],
+      "file": "#pSrcDir#/orders_raw.csv"
+    },
+    {
+      "name": "run_J01_Land_Orders",
+      "kind": "job",
+      "deps": [
+        [
+          "wff_Source_Orders",
+          "ok"
+        ]
+      ],
+      "job": "J01_Land_Orders"
+    },
+    {
+      "name": "run_J02_Land_Customers",
+      "kind": "job",
+      "deps": [
+        [
+          "wff_Source_Orders",
+          "ok"
+        ]
+      ],
+      "job": "J02_Land_Customers"
+    },
+    {
+      "name": "run_J03_Land_Products",
+      "kind": "job",
+      "deps": [
+        [
+          "wff_Source_Orders",
+          "ok"
+        ]
+      ],
+      "job": "J03_Land_Products"
+    },
+    {
+      "name": "run_J04_Land_Stores_Employees",
+      "kind": "job",
+      "deps": [
+        [
+          "wff_Source_Orders",
+          "ok"
+        ]
+      ],
+      "job": "J04_Land_Stores_Employees"
+    },
+    {
+      "name": "seq_Land_Done",
+      "kind": "seq",
+      "deps": [
+        [
+          "run_J01_Land_Orders",
+          "ok"
+        ],
+        [
+          "run_J02_Land_Customers",
+          "ok"
+        ],
+        [
+          "run_J03_Land_Products",
+          "ok"
+        ],
+        [
+          "run_J04_Land_Stores_Employees",
+          "ok"
+        ]
+      ],
+      "mode": "ALL"
+    },
+    {
+      "name": "act_Check_Dim_Customer",
+      "kind": "exec",
+      "deps": [
+        [
+          "seq_Land_Done",
+          "ok"
+        ]
+      ],
+      "command": "test -f \"#pDwhDir#/dim_customer.csv\" && echo EXISTS || echo MISSING",
+      "run_var": "dim_state"
+    },
+    {
+      "name": "run_J05_Dim_Customer_Initial",
+      "kind": "job",
+      "deps": [
+        [
+          "act_Check_Dim_Customer",
+          "custom:act_Check_Dim_Customer.$CommandOutput = \"MISSING\""
+        ]
+      ],
+      "job": "J05_Dim_Customer_Initial",
+      "run_if": "MISSING"
+    },
+    {
+      "name": "seq_Dim_Customer_Ready",
+      "kind": "seq",
+      "deps": [
+        [
+          "run_J05_Dim_Customer_Initial",
+          "ok"
+        ],
+        [
+          "act_Check_Dim_Customer",
+          "otherwise"
+        ]
+      ],
+      "mode": "ANY"
+    },
+    {
+      "name": "run_J06_Dim_Customer_SCD2",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Dim_Customer_Ready",
+          "ok"
+        ]
+      ],
+      "job": "J06_Dim_Customer_SCD2"
+    },
+    {
+      "name": "act_Promote_Dim_Customer",
+      "kind": "exec",
+      "deps": [
+        [
+          "run_J06_Dim_Customer_SCD2",
+          "ok"
+        ]
+      ],
+      "command": "mv -f \"#pDwhDir#/dim_customer_next.csv\" \"#pDwhDir#/dim_customer.csv\""
+    },
+    {
+      "name": "run_J07_Dim_Product",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Land_Done",
+          "ok"
+        ]
+      ],
+      "job": "J07_Dim_Product"
+    },
+    {
+      "name": "run_J08_Dim_Store_Employee",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Land_Done",
+          "ok"
+        ]
+      ],
+      "job": "J08_Dim_Store_Employee"
+    },
+    {
+      "name": "run_J09_Dim_Date_Promo_FX",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Land_Done",
+          "ok"
+        ]
+      ],
+      "job": "J09_Dim_Date_Promo_FX"
+    },
+    {
+      "name": "seq_Dims_Done",
+      "kind": "seq",
+      "deps": [
+        [
+          "act_Promote_Dim_Customer",
+          "ok"
+        ],
+        [
+          "run_J07_Dim_Product",
+          "ok"
+        ],
+        [
+          "run_J08_Dim_Store_Employee",
+          "ok"
+        ],
+        [
+          "run_J09_Dim_Date_Promo_FX",
+          "ok"
+        ]
+      ],
+      "mode": "ALL"
+    },
+    {
+      "name": "run_J10_Fact_Sales",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Dims_Done",
+          "ok"
+        ]
+      ],
+      "job": "J10_Fact_Sales"
+    },
+    {
+      "name": "run_J11_Fact_Returns",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Dims_Done",
+          "ok"
+        ]
+      ],
+      "job": "J11_Fact_Returns"
+    },
+    {
+      "name": "run_J12_Fact_Invoice",
+      "kind": "job",
+      "deps": [
+        [
+          "run_J10_Fact_Sales",
+          "ok"
+        ]
+      ],
+      "job": "J12_Fact_Invoice"
+    },
+    {
+      "name": "seq_Facts_Done",
+      "kind": "seq",
+      "deps": [
+        [
+          "run_J11_Fact_Returns",
+          "ok"
+        ],
+        [
+          "run_J12_Fact_Invoice",
+          "ok"
+        ]
+      ],
+      "mode": "ALL"
+    },
+    {
+      "name": "run_J13_Mart_RETAIL_DATA_MART",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J13_Mart_RETAIL_DATA_MART"
+    },
+    {
+      "name": "run_J14_Analysis_Employee_Transactions",
+      "kind": "job",
+      "deps": [
+        [
+          "run_J13_Mart_RETAIL_DATA_MART",
+          "ok"
+        ]
+      ],
+      "job": "J14_Analysis_Employee_Transactions"
+    },
+    {
+      "name": "run_J15_Analysis_CustomerType_Profit",
+      "kind": "job",
+      "deps": [
+        [
+          "run_J13_Mart_RETAIL_DATA_MART",
+          "ok"
+        ]
+      ],
+      "job": "J15_Analysis_CustomerType_Profit"
+    },
+    {
+      "name": "run_J16_Bonus_Program",
+      "kind": "job",
+      "deps": [
+        [
+          "run_J13_Mart_RETAIL_DATA_MART",
+          "ok"
+        ]
+      ],
+      "job": "J16_Bonus_Program"
+    },
+    {
+      "name": "run_J17_Mart_Customer_360",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J17_Mart_Customer_360"
+    },
+    {
+      "name": "run_J18_Mart_Product_Performance",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J18_Mart_Product_Performance"
+    },
+    {
+      "name": "run_J19_Mart_Basket_Affinity",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J19_Mart_Basket_Affinity"
+    },
+    {
+      "name": "run_J20_Mart_Store_Monthly",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J20_Mart_Store_Monthly"
+    },
+    {
+      "name": "run_J21_Mart_Promo_Effectiveness",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J21_Mart_Promo_Effectiveness"
+    },
+    {
+      "name": "run_J22_DQ_Fact_Checks",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J22_DQ_Fact_Checks"
+    },
+    {
+      "name": "run_J23_Reconcile_Source_To_Fact",
+      "kind": "job",
+      "deps": [
+        [
+          "seq_Facts_Done",
+          "ok"
+        ]
+      ],
+      "job": "J23_Reconcile_Source_To_Fact"
+    },
+    {
+      "name": "seq_All_Done",
+      "kind": "seq",
+      "deps": [
+        [
+          "run_J14_Analysis_Employee_Transactions",
+          "ok"
+        ],
+        [
+          "run_J15_Analysis_CustomerType_Profit",
+          "ok"
+        ],
+        [
+          "run_J16_Bonus_Program",
+          "ok"
+        ],
+        [
+          "run_J17_Mart_Customer_360",
+          "ok"
+        ],
+        [
+          "run_J18_Mart_Product_Performance",
+          "ok"
+        ],
+        [
+          "run_J19_Mart_Basket_Affinity",
+          "ok"
+        ],
+        [
+          "run_J20_Mart_Store_Monthly",
+          "ok"
+        ],
+        [
+          "run_J21_Mart_Promo_Effectiveness",
+          "ok"
+        ],
+        [
+          "run_J22_DQ_Fact_Checks",
+          "ok"
+        ],
+        [
+          "run_J23_Reconcile_Source_To_Fact",
+          "ok"
+        ]
+      ],
+      "mode": "ALL"
+    },
+    {
+      "name": "act_Notify_Success",
+      "kind": "notify",
+      "deps": [
+        [
+          "seq_All_Done",
+          "ok"
+        ]
+      ],
+      "subject": "Retail DW pipeline succeeded for #pRunDate#"
+    },
+    {
+      "name": "exc_Any_Failure",
+      "kind": "exc",
+      "deps": []
+    },
+    {
+      "name": "act_Notify_Failure",
+      "kind": "notify",
+      "deps": [
+        [
+          "exc_Any_Failure",
+          "ok"
+        ]
+      ],
+      "subject": "Retail DW pipeline FAILED for #pRunDate#"
+    },
+    {
+      "name": "term_Abort",
+      "kind": "term",
+      "deps": [
+        [
+          "act_Notify_Failure",
+          "ok"
+        ]
+      ]
+    }
+  ]
+}
