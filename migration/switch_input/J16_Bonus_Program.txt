@@ -1,0 +1,202 @@
+DATASTAGE PARALLEL JOB: J16_Bonus_Program
+Description: Q3: bonus for the customers contributing the most profit, scaled by loyalty tier
+Folder: \\Retail_DW\\Pipeline\\4_Marts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_mart  [PxSequentialFile]
+    out link lnk_mart  <-> agg_Customer_Profit
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pMartDir#/RETAIL_DATA_MART.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col product_name sql=12 prec=255,0 nullable=0
+        col list_price sql=3 prec=18,2 nullable=0
+        col store_name sql=12 prec=255,0 nullable=0
+        col rating sql=4 prec=10,0 nullable=0
+        col no_of_employees sql=4 prec=10,0 nullable=0
+
+STAGE agg_Customer_Profit  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)gross_profit\(2)0\(1)\(3)\(3)sum\(2)profit_total\(2)0
+    in  link lnk_mart  <-> src_mart
+    out link lnk_cust_profit  <-> srt_Profit
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_mart.customer_id
+        col profit_total sql=3 prec=18,2 nullable=0
+
+STAGE srt_Profit  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)profit_total\(2)0\(1)\(3)\(3)asc\\desc\(2)desc\(2)0
+    in  link lnk_cust_profit  <-> agg_Customer_Profit
+    out link lnk_ranked  <-> hd_Top100
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_cust_profit.customer_id
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_cust_profit.profit_total
+
+STAGE hd_Top100  [PxHead]
+    property nrecs = 100
+    property selection = part
+    property part = \(2)\(2)0\(1)\(3)part\(2)0\(2)0
+    in  link lnk_ranked  <-> srt_Profit
+    out link lnk_top100  <-> jn_Customer
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_ranked.customer_id
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_ranked.profit_total
+
+STAGE src_dim_customer  [PxSequentialFile]
+    out link lnk_dim_customer  <-> flt_Current_Customer
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_customer.csv\(2)0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col email sql=12 prec=255,0 nullable=0
+        col city sql=12 prec=255,0 nullable=0
+        col attr_hash sql=-5 prec=19,0 nullable=0
+        col version_no sql=4 prec=10,0 nullable=0
+        col eff_start_key sql=4 prec=10,0 nullable=0
+        col eff_end_key sql=4 prec=10,0 nullable=0
+        col is_current sql=4 prec=10,0 nullable=0
+
+STAGE flt_Current_Customer  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)is_current = 1\(2)0
+    in  link lnk_dim_customer  <-> src_dim_customer
+    out link lnk_cur  <-> jn_Customer
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_dim_customer.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dim_customer.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_dim_customer.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_dim_customer.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_dim_customer.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_dim_customer.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_dim_customer.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim_customer.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_dim_customer.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_dim_customer.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_dim_customer.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_dim_customer.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_dim_customer.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_dim_customer.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_dim_customer.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_dim_customer.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_dim_customer.is_current
+
+STAGE jn_Customer  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    in  link lnk_top100  <-> hd_Top100
+    in  link lnk_cur  <-> flt_Current_Customer
+    out link lnk_named  <-> xfm_Bonus
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_top100.customer_id
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_top100.profit_total
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_cur.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_cur.cust_name
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_cur.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_cur.loyalty_tier
+
+STAGE xfm_Bonus  [CTransformerStage]
+    in  link lnk_named  <-> jn_Customer
+    out link lnk_bonus  <-> cpy_Bonus
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_named.customer_id
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_named.profit_total
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_named.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_named.cust_name
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_named.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_named.loyalty_tier
+        col bonus_rate sql=3 prec=18,6 nullable=0  := If lnk_named.loyalty_tier = "PLATINUM" Then 0.05 Else If lnk_named.loyalty_tier = "GOLD" Then 0.04 Else If lnk_named.loyalty_tier = "SILVER" Then 0.03 Else 0.02
+        col bonus_amount sql=3 prec=18,2 nullable=0  := If lnk_named.loyalty_tier = "PLATINUM" Then lnk_named.profit_total * 0.05 Else If lnk_named.loyalty_tier = "GOLD" Then lnk_named.profit_total * 0.04 Else If lnk_named.loyalty_tier = "SILVER" Then lnk_named.profit_total * 0.03 Else lnk_named.profit_total * 0.02
+        col program sql=12 prec=255,0 nullable=0  := "BONUS_2011"
+
+STAGE cpy_Bonus  [PxCopy]
+    in  link lnk_bonus  <-> xfm_Bonus
+    out link lnk_out  <-> tgt_bonus_program
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_bonus.customer_id
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_bonus.profit_total
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_bonus.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_bonus.cust_name
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_bonus.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_bonus.loyalty_tier
+        col bonus_rate sql=3 prec=18,6 nullable=0  := lnk_bonus.bonus_rate
+        col bonus_amount sql=3 prec=18,2 nullable=0  := lnk_bonus.bonus_amount
+        col program sql=12 prec=255,0 nullable=0  := lnk_bonus.program
+    out link lnk_total_in  <-> agg_Bonus_Total
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_bonus.customer_id
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_bonus.profit_total
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_bonus.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_bonus.cust_name
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_bonus.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_bonus.loyalty_tier
+        col bonus_rate sql=3 prec=18,6 nullable=0  := lnk_bonus.bonus_rate
+        col bonus_amount sql=3 prec=18,2 nullable=0  := lnk_bonus.bonus_amount
+        col program sql=12 prec=255,0 nullable=0  := lnk_bonus.program
+
+STAGE tgt_bonus_program  [PxSequentialFile]
+    in  link lnk_out  <-> cpy_Bonus
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Q3_Bonus_Program.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE agg_Bonus_Total  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)program\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)bonus_amount\(2)0\(1)\(3)\(3)sum\(2)bonus_total\(2)0
+    in  link lnk_total_in  <-> cpy_Bonus
+    out link lnk_total  <-> tgt_bonus_summary
+        col program sql=12 prec=255,0 nullable=0  := lnk_total_in.program
+        col bonus_total sql=3 prec=18,2 nullable=0
+
+STAGE tgt_bonus_summary  [PxSequentialFile]
+    in  link lnk_total  <-> agg_Bonus_Total
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Q3_Bonus_Summary.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

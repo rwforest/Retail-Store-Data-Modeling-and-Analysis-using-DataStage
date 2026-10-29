@@ -1,0 +1,84 @@
+DATASTAGE PARALLEL JOB: J05_Dim_Customer_Initial
+Description: Initial load of Dim_Customer (SCD2 version 1) from the 2010 snapshot
+Folder: \\Retail_DW\\Pipeline\\2_Dimensions
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_stg_customers_2010  [PxSequentialFile]
+    out link lnk_stg  <-> xfm_Version1
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pStgDir#/stg_customers_2010.csv\(2)0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col email sql=12 prec=255,0 nullable=0
+        col city sql=12 prec=255,0 nullable=0
+        col snapshot_date sql=9 prec=10,0 nullable=0
+        col attr_hash sql=-5 prec=19,0 nullable=0
+
+STAGE xfm_Version1  [CTransformerStage]
+    in  link lnk_stg  <-> src_stg_customers_2010
+    out link lnk_v1  <-> srt_Dim_Customer
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_stg.customer_id * 1000 + 1
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_stg.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_stg.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_stg.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_stg.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_stg.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_stg.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_stg.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_stg.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_stg.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_stg.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_stg.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_stg.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := 1
+        col eff_start_key sql=4 prec=10,0 nullable=0  := 19000101
+        col eff_end_key sql=4 prec=10,0 nullable=0  := 99991231
+        col is_current sql=4 prec=10,0 nullable=0  := 1
+
+STAGE srt_Dim_Customer  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0\(1)\(3)key\(2)version_no\(2)0
+    in  link lnk_v1  <-> xfm_Version1
+    out link lnk_sorted  <-> tgt_dim_customer
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_v1.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_v1.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_v1.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_v1.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_v1.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_v1.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_v1.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_v1.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_v1.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_v1.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_v1.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_v1.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_v1.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_v1.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_v1.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_v1.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_v1.is_current
+
+STAGE tgt_dim_customer  [PxSequentialFile]
+    in  link lnk_sorted  <-> srt_Dim_Customer
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_customer.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

@@ -1,0 +1,600 @@
+DATASTAGE PARALLEL JOB: J06_Dim_Customer_SCD2
+Description: Apply the 2011 snapshot to Dim_Customer: expire changed rows, add new versions
+Folder: \\Retail_DW\\Pipeline\\2_Dimensions
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_dim_customer  [PxSequentialFile]
+    out link lnk_dim  <-> cpy_Dim
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_customer.csv\(2)0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col email sql=12 prec=255,0 nullable=0
+        col city sql=12 prec=255,0 nullable=0
+        col attr_hash sql=-5 prec=19,0 nullable=0
+        col version_no sql=4 prec=10,0 nullable=0
+        col eff_start_key sql=4 prec=10,0 nullable=0
+        col eff_end_key sql=4 prec=10,0 nullable=0
+        col is_current sql=4 prec=10,0 nullable=0
+
+STAGE cpy_Dim  [PxCopy]
+    in  link lnk_dim  <-> src_dim_customer
+    out link lnk_dim_a  <-> flt_Current_Rows
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_dim.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dim.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_dim.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_dim.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_dim.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_dim.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_dim.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_dim.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_dim.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_dim.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_dim.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_dim.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_dim.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_dim.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_dim.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_dim.is_current
+    out link lnk_dim_b  <-> flt_History_Rows
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_dim.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dim.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_dim.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_dim.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_dim.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_dim.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_dim.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_dim.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_dim.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_dim.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_dim.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_dim.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_dim.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_dim.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_dim.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_dim.is_current
+
+STAGE flt_Current_Rows  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)is_current = 1\(2)0
+    in  link lnk_dim_a  <-> cpy_Dim
+    out link lnk_current  <-> xfm_Prefix_Old
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_dim_a.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dim_a.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_dim_a.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_dim_a.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_dim_a.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_dim_a.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_dim_a.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim_a.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_dim_a.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_dim_a.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_dim_a.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_dim_a.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_dim_a.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_dim_a.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_dim_a.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_dim_a.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_dim_a.is_current
+
+STAGE flt_History_Rows  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)is_current = 0\(2)0
+    in  link lnk_dim_b  <-> cpy_Dim
+    out link lnk_history  <-> fnl_Dim_Next
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_dim_b.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dim_b.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_dim_b.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_dim_b.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_dim_b.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_dim_b.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_dim_b.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim_b.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_dim_b.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_dim_b.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_dim_b.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_dim_b.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_dim_b.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_dim_b.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_dim_b.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_dim_b.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_dim_b.is_current
+
+STAGE xfm_Prefix_Old  [CTransformerStage]
+    in  link lnk_current  <-> flt_Current_Rows
+    out link lnk_old  <-> jn_Snapshot_vs_Current
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_current.customer_id
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_current.customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_current.cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_current.gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_current.age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_current.spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_current.annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_current.country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_current.customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_current.loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_current.email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_current.city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_current.attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_current.version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_current.eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_current.eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_current.is_current
+
+STAGE src_stg_customers_2011  [PxSequentialFile]
+    out link lnk_snap  <-> jn_Snapshot_vs_Current
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pStgDir#/stg_customers_2011.csv\(2)0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col email sql=12 prec=255,0 nullable=0
+        col city sql=12 prec=255,0 nullable=0
+        col snapshot_date sql=9 prec=10,0 nullable=0
+        col attr_hash sql=-5 prec=19,0 nullable=0
+
+STAGE jn_Snapshot_vs_Current  [PxJoin]
+    property operator = leftouterjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    in  link lnk_snap  <-> src_stg_customers_2011
+    in  link lnk_old  <-> xfm_Prefix_Old
+    out link lnk_cmp  <-> xfm_Detect_Change
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_snap.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_snap.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_snap.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_snap.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_snap.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_snap.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_snap.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_snap.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_snap.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_snap.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_snap.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_snap.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_snap.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=1  := lnk_old.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=1  := lnk_old.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=1  := lnk_old.old_gender
+        col old_age sql=4 prec=10,0 nullable=1  := lnk_old.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=1  := lnk_old.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=1  := lnk_old.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=1  := lnk_old.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=1  := lnk_old.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=1  := lnk_old.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=1  := lnk_old.old_email
+        col old_city sql=12 prec=255,0 nullable=1  := lnk_old.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=1  := lnk_old.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=1  := lnk_old.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=1  := lnk_old.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=1  := lnk_old.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=1  := lnk_old.old_is_current
+
+STAGE xfm_Detect_Change  [CTransformerStage]
+    in  link lnk_cmp  <-> jn_Snapshot_vs_Current
+    out link lnk_detected  <-> cpy_Detect
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_cmp.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_cmp.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_cmp.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_cmp.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_cmp.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_cmp.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_cmp.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_cmp.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_cmp.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_cmp.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_cmp.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_cmp.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_cmp.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_customer_sk, 0)
+        col old_cust_name sql=12 prec=255,0 nullable=0  := NullToValue(lnk_cmp.old_cust_name, "")
+        col old_gender sql=12 prec=255,0 nullable=0  := NullToValue(lnk_cmp.old_gender, "")
+        col old_age sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_age, 0)
+        col old_spending_score sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_spending_score, 0)
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_annual_income_k, 0)
+        col old_country sql=12 prec=255,0 nullable=0  := NullToValue(lnk_cmp.old_country, "")
+        col old_customer_type sql=12 prec=255,0 nullable=0  := NullToValue(lnk_cmp.old_customer_type, "")
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := NullToValue(lnk_cmp.old_loyalty_tier, "")
+        col old_email sql=12 prec=255,0 nullable=0  := NullToValue(lnk_cmp.old_email, "")
+        col old_city sql=12 prec=255,0 nullable=0  := NullToValue(lnk_cmp.old_city, "")
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := NullToValue(lnk_cmp.old_attr_hash, 0)
+        col old_version_no sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_version_no, 0)
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_eff_start_key, 0)
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_eff_end_key, 0)
+        col old_is_current sql=4 prec=10,0 nullable=0  := NullToValue(lnk_cmp.old_is_current, 0)
+        col change_flag sql=12 prec=255,0 nullable=0  := If IsNull(lnk_cmp.old_attr_hash) Then "N" Else If lnk_cmp.old_attr_hash <> lnk_cmp.attr_hash Then "C" Else "U"
+
+STAGE cpy_Detect  [PxCopy]
+    in  link lnk_detected  <-> xfm_Detect_Change
+    out link lnk_u  <-> flt_Unchanged
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_detected.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_detected.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_detected.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_detected.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_detected.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_detected.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_detected.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_detected.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_detected.old_gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_detected.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_detected.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_detected.old_email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_detected.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_detected.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_detected.old_is_current
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_detected.change_flag
+    out link lnk_nc  <-> flt_New_Or_Changed
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_detected.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_detected.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_detected.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_detected.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_detected.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_detected.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_detected.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_detected.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_detected.old_gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_detected.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_detected.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_detected.old_email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_detected.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_detected.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_detected.old_is_current
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_detected.change_flag
+    out link lnk_c  <-> flt_Changed
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_detected.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_detected.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_detected.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_detected.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_detected.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_detected.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_detected.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_detected.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_detected.old_gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_detected.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_detected.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_detected.old_email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_detected.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_detected.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_detected.old_is_current
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_detected.change_flag
+    out link lnk_audit  <-> agg_Change_Counts
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_detected.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_detected.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_detected.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_detected.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_detected.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_detected.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_detected.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_detected.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_detected.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_detected.old_gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_detected.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_detected.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_detected.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_detected.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_detected.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_detected.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_detected.old_email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_detected.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_detected.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_detected.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_detected.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_detected.old_is_current
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_detected.change_flag
+
+STAGE flt_Unchanged  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)change_flag = "U"\(2)0
+    in  link lnk_u  <-> cpy_Detect
+    out link lnk_unchanged  <-> xfm_Carry_Unchanged
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_u.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_u.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_u.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_u.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_u.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_u.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_u.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_u.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_u.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_u.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_u.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_u.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_u.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_u.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_u.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_u.old_gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_u.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_u.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_u.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_u.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_u.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_u.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_u.old_email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_u.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_u.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_u.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_u.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_u.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_u.old_is_current
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_u.change_flag
+
+STAGE flt_New_Or_Changed  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)change_flag <> "U"\(2)0
+    in  link lnk_nc  <-> cpy_Detect
+    out link lnk_new_or_changed  <-> xfm_New_Version
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_nc.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_nc.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_nc.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_nc.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_nc.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_nc.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_nc.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_nc.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_nc.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_nc.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_nc.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_nc.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_nc.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_nc.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_nc.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_nc.old_gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_nc.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_nc.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_nc.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_nc.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_nc.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_nc.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_nc.old_email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_nc.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_nc.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_nc.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_nc.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_nc.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_nc.old_is_current
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_nc.change_flag
+
+STAGE flt_Changed  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)change_flag = "C"\(2)0
+    in  link lnk_c  <-> cpy_Detect
+    out link lnk_changed  <-> xfm_Expire_Old
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_c.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_c.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_c.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_c.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_c.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_c.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_c.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_c.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_c.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_c.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_c.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_c.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_c.attr_hash
+        col old_customer_sk sql=4 prec=10,0 nullable=0  := lnk_c.old_customer_sk
+        col old_cust_name sql=12 prec=255,0 nullable=0  := lnk_c.old_cust_name
+        col old_gender sql=12 prec=255,0 nullable=0  := lnk_c.old_gender
+        col old_age sql=4 prec=10,0 nullable=0  := lnk_c.old_age
+        col old_spending_score sql=4 prec=10,0 nullable=0  := lnk_c.old_spending_score
+        col old_annual_income_k sql=4 prec=10,0 nullable=0  := lnk_c.old_annual_income_k
+        col old_country sql=12 prec=255,0 nullable=0  := lnk_c.old_country
+        col old_customer_type sql=12 prec=255,0 nullable=0  := lnk_c.old_customer_type
+        col old_loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_c.old_loyalty_tier
+        col old_email sql=12 prec=255,0 nullable=0  := lnk_c.old_email
+        col old_city sql=12 prec=255,0 nullable=0  := lnk_c.old_city
+        col old_attr_hash sql=-5 prec=19,0 nullable=0  := lnk_c.old_attr_hash
+        col old_version_no sql=4 prec=10,0 nullable=0  := lnk_c.old_version_no
+        col old_eff_start_key sql=4 prec=10,0 nullable=0  := lnk_c.old_eff_start_key
+        col old_eff_end_key sql=4 prec=10,0 nullable=0  := lnk_c.old_eff_end_key
+        col old_is_current sql=4 prec=10,0 nullable=0  := lnk_c.old_is_current
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_c.change_flag
+
+STAGE xfm_Carry_Unchanged  [CTransformerStage]
+    in  link lnk_unchanged  <-> flt_Unchanged
+    out link lnk_carry  <-> fnl_Dim_Next
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_unchanged.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_unchanged.old_cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_unchanged.old_gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_unchanged.old_country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_unchanged.old_customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_unchanged.old_loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_unchanged.old_email
+        col city sql=12 prec=255,0 nullable=0  := lnk_unchanged.old_city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_unchanged.old_attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_unchanged.old_is_current
+
+STAGE xfm_Expire_Old  [CTransformerStage]
+    in  link lnk_changed  <-> flt_Changed
+    out link lnk_expired  <-> fnl_Dim_Next
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_changed.old_customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_changed.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_changed.old_cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_changed.old_gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_changed.old_age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_changed.old_spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_changed.old_annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_changed.old_country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_changed.old_customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_changed.old_loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_changed.old_email
+        col city sql=12 prec=255,0 nullable=0  := lnk_changed.old_city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_changed.old_attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_changed.old_version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_changed.old_eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := StringToDecimal(Ereplace(DateToString(DateFromDaysSince(-1, StringToDate(pEffDate, "%yyyy-%mm-%dd")), "%yyyy-%mm-%dd"), "-", ""))
+        col is_current sql=4 prec=10,0 nullable=0  := 0
+
+STAGE xfm_New_Version  [CTransformerStage]
+    in  link lnk_new_or_changed  <-> flt_New_Or_Changed
+    out link lnk_newver  <-> fnl_Dim_Next
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_new_or_changed.customer_id * 1000 + lnk_new_or_changed.old_version_no + 1
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_new_or_changed.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_new_or_changed.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_new_or_changed.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_new_or_changed.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_new_or_changed.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_new_or_changed.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_new_or_changed.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_new_or_changed.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_new_or_changed.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_new_or_changed.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_new_or_changed.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_new_or_changed.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_new_or_changed.old_version_no + 1
+        col eff_start_key sql=4 prec=10,0 nullable=0  := If lnk_new_or_changed.old_version_no = 0 Then 19000101 Else StringToDecimal(Ereplace(pEffDate, "-", ""))
+        col eff_end_key sql=4 prec=10,0 nullable=0  := 99991231
+        col is_current sql=4 prec=10,0 nullable=0  := 1
+
+STAGE fnl_Dim_Next  [PxFunnel]
+    property operator = funnel
+    in  link lnk_history  <-> flt_History_Rows
+    in  link lnk_carry  <-> xfm_Carry_Unchanged
+    in  link lnk_expired  <-> xfm_Expire_Old
+    in  link lnk_newver  <-> xfm_New_Version
+    out link lnk_all_versions  <-> srt_Dim_Next
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_history.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_history.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_history.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_history.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_history.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_history.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_history.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_history.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_history.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_history.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_history.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_history.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_history.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_history.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_history.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_history.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_history.is_current
+
+STAGE srt_Dim_Next  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0\(1)\(3)key\(2)version_no\(2)0
+    in  link lnk_all_versions  <-> fnl_Dim_Next
+    out link lnk_sorted  <-> tgt_dim_customer_next
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_all_versions.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_all_versions.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_all_versions.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_all_versions.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_all_versions.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_all_versions.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_all_versions.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_all_versions.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_all_versions.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_all_versions.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_all_versions.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_all_versions.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_all_versions.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_all_versions.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_all_versions.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_all_versions.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_all_versions.is_current
+
+STAGE tgt_dim_customer_next  [PxSequentialFile]
+    in  link lnk_sorted  <-> srt_Dim_Next
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_customer_next.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE agg_Change_Counts  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)change_flag\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)customers\(2)0
+    in  link lnk_audit  <-> cpy_Detect
+    out link lnk_change_counts  <-> tgt_audit_scd2_customer
+        col change_flag sql=12 prec=255,0 nullable=0  := lnk_audit.change_flag
+        col customers sql=4 prec=10,0 nullable=0
+
+STAGE tgt_audit_scd2_customer  [PxSequentialFile]
+    in  link lnk_change_counts  <-> agg_Change_Counts
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pAuditDir#/audit_scd2_customer.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

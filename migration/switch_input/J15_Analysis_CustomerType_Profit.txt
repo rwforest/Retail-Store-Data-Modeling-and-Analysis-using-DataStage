@@ -1,0 +1,115 @@
+DATASTAGE PARALLEL JOB: J15_Analysis_CustomerType_Profit
+Description: Q2: which customer type (citizen/foreign) generates the highest profit
+Folder: \\Retail_DW\\Pipeline\\4_Marts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_mart  [PxSequentialFile]
+    out link lnk_mart  <-> agg_By_Type
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pMartDir#/RETAIL_DATA_MART.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col product_name sql=12 prec=255,0 nullable=0
+        col list_price sql=3 prec=18,2 nullable=0
+        col store_name sql=12 prec=255,0 nullable=0
+        col rating sql=4 prec=10,0 nullable=0
+        col no_of_employees sql=4 prec=10,0 nullable=0
+
+STAGE agg_By_Type  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_type\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)gross_profit\(2)0\(1)\(3)\(3)sum\(2)profit_total\(2)0\(1)\(3)reduce\(2)sales_amount\(2)0\(1)\(3)\(3)sum\(2)sales_total\(2)0\(1)\(3)reduce\(2)line_cnt\(2)0\(1)\(3)\(3)sum\(2)lines\(2)0
+    in  link lnk_mart  <-> src_mart
+    out link lnk_by_type  <-> srt_Profit
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_mart.customer_type
+        col profit_total sql=3 prec=18,2 nullable=0
+        col sales_total sql=3 prec=18,2 nullable=0
+        col lines sql=-5 prec=19,0 nullable=0
+
+STAGE srt_Profit  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)profit_total\(2)0\(1)\(3)\(3)asc\\desc\(2)desc\(2)0
+    in  link lnk_by_type  <-> agg_By_Type
+    out link lnk_ranked  <-> cpy_Ranked
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_by_type.customer_type
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_by_type.profit_total
+        col sales_total sql=3 prec=18,2 nullable=0  := lnk_by_type.sales_total
+        col lines sql=-5 prec=19,0 nullable=0  := lnk_by_type.lines
+
+STAGE cpy_Ranked  [PxCopy]
+    in  link lnk_ranked  <-> srt_Profit
+    out link lnk_all  <-> tgt_customer_type_ranking
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_ranked.customer_type
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_ranked.profit_total
+        col sales_total sql=3 prec=18,2 nullable=0  := lnk_ranked.sales_total
+        col lines sql=-5 prec=19,0 nullable=0  := lnk_ranked.lines
+    out link lnk_win_in  <-> hd_Winner
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_ranked.customer_type
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_ranked.profit_total
+        col sales_total sql=3 prec=18,2 nullable=0  := lnk_ranked.sales_total
+        col lines sql=-5 prec=19,0 nullable=0  := lnk_ranked.lines
+
+STAGE tgt_customer_type_ranking  [PxSequentialFile]
+    in  link lnk_all  <-> cpy_Ranked
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Q2_CustomerType_Profit.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE hd_Winner  [PxHead]
+    property nrecs = 1
+    property selection = part
+    property part = \(2)\(2)0\(1)\(3)part\(2)0\(2)0
+    in  link lnk_win_in  <-> cpy_Ranked
+    out link lnk_winner  <-> tgt_customer_type_winner
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_win_in.customer_type
+        col profit_total sql=3 prec=18,2 nullable=0  := lnk_win_in.profit_total
+        col sales_total sql=3 prec=18,2 nullable=0  := lnk_win_in.sales_total
+        col lines sql=-5 prec=19,0 nullable=0  := lnk_win_in.lines
+
+STAGE tgt_customer_type_winner  [PxSequentialFile]
+    in  link lnk_winner  <-> hd_Winner
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Q2_Winning_CustomerType.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

@@ -1,0 +1,288 @@
+{
+ "J01_Land_Orders": {
+  "views_mine": 12,
+  "views_switch": 12,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_dedup"
+  ]
+ },
+ "J02_Land_Customers": {
+  "views_mine": 6,
+  "views_switch": 6,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_std_2010",
+   "lnk_dedup_2010",
+   "lnk_std_2011",
+   "lnk_dedup_2011"
+  ]
+ },
+ "J03_Land_Products": {
+  "views_mine": 10,
+  "views_switch": 10,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_std_prod",
+   "lnk_std_sup",
+   "lnk_prod_sup_nn",
+   "lnk_dedup"
+  ]
+ },
+ "J04_Land_Stores_Employees": {
+  "views_mine": 8,
+  "views_switch": 8,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_stores",
+   "lnk_employees",
+   "lnk_std_store",
+   "lnk_emp_out",
+   "lnk_emp_cnt",
+   "lnk_store_final"
+  ]
+ },
+ "J05_Dim_Customer_Initial": {
+  "views_mine": 2,
+  "views_switch": 3,
+  "missing_in_switch": [],
+  "extra_in_switch": [
+   "lnk_stg"
+  ],
+  "writes_equal": true,
+  "reads_equal": false,
+  "sql_differs": [
+   "lnk_v1"
+  ]
+ },
+ "J06_Dim_Customer_SCD2": {
+  "views_mine": 20,
+  "views_switch": 20,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_old",
+   "lnk_detected",
+   "lnk_carry",
+   "lnk_expired",
+   "lnk_newver",
+   "lnk_all_versions",
+   "lnk_sorted"
+  ]
+ },
+ "J07_Dim_Product": {
+  "views_mine": 7,
+  "views_switch": 7,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_dedup",
+   "lnk_sorted",
+   "lnk_dim"
+  ]
+ },
+ "J08_Dim_Store_Employee": {
+  "views_mine": 6,
+  "views_switch": 6,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_dim_store",
+   "lnk_store_out",
+   "lnk_store_keys_in",
+   "lnk_store_keys",
+   "lnk_dim_emp"
+  ]
+ },
+ "J09_Dim_Date_Promo_FX": {
+  "views_mine": 8,
+  "views_switch": 8,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_dim_date",
+   "lnk_dim_fx"
+  ]
+ },
+ "J10_Fact_Sales": {
+  "views_mine": 18,
+  "views_switch": 18,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_fact"
+  ]
+ },
+ "J11_Fact_Returns": {
+  "views_mine": 11,
+  "views_switch": 11,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_ret",
+   "lnk_p_nn",
+   "lnk_c_nn"
+  ]
+ },
+ "J12_Fact_Invoice": {
+  "views_mine": 3,
+  "views_switch": 3,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_basket"
+  ]
+ },
+ "J13_Mart_RETAIL_DATA_MART": {
+  "views_mine": 6,
+  "views_switch": 6,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_upper"
+  ]
+ },
+ "J14_Analysis_Employee_Transactions": {
+  "views_mine": 7,
+  "views_switch": 7,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_invoices"
+  ]
+ },
+ "J15_Analysis_CustomerType_Profit": {
+  "views_mine": 5,
+  "views_switch": 5,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_ranked",
+   "lnk_all",
+   "lnk_win_in",
+   "lnk_winner"
+  ]
+ },
+ "J16_Bonus_Program": {
+  "views_mine": 9,
+  "views_switch": 9,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_bonus"
+  ]
+ },
+ "J17_Mart_Customer_360": {
+  "views_mine": 14,
+  "views_switch": 14,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_rfm"
+  ]
+ },
+ "J18_Mart_Product_Performance": {
+  "views_mine": 10,
+  "views_switch": 10,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": []
+ },
+ "J19_Mart_Basket_Affinity": {
+  "views_mine": 12,
+  "views_switch": 12,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_prep",
+   "lnk_dedup",
+   "lnk_a",
+   "lnk_b_in",
+   "lnk_b"
+  ]
+ },
+ "J20_Mart_Store_Monthly": {
+  "views_mine": 4,
+  "views_switch": 4,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_kpi"
+  ]
+ },
+ "J21_Mart_Promo_Effectiveness": {
+  "views_mine": 5,
+  "views_switch": 5,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": []
+ },
+ "J22_DQ_Fact_Checks": {
+  "views_mine": 18,
+  "views_switch": 18,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_sorted"
+  ]
+ },
+ "J23_Reconcile_Source_To_Fact": {
+  "views_mine": 7,
+  "views_switch": 7,
+  "missing_in_switch": [],
+  "extra_in_switch": [],
+  "writes_equal": true,
+  "reads_equal": true,
+  "sql_differs": [
+   "lnk_k1",
+   "lnk_k2",
+   "lnk_diff"
+  ]
+ }
+}

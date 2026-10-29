@@ -1,0 +1,125 @@
+DATASTAGE PARALLEL JOB: J08_Dim_Store_Employee
+Description: Build Dim_Store and Dim_Employee with surrogate keys
+Folder: \\Retail_DW\\Pipeline\\2_Dimensions
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_stg_stores  [PxSequentialFile]
+    out link lnk_stg_store  <-> xfm_Store_SK
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pStgDir#/stg_stores.csv\(2)0
+        col store_id sql=12 prec=255,0 nullable=0
+        col store_name sql=12 prec=255,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col channel sql=12 prec=255,0 nullable=0
+        col rating sql=4 prec=10,0 nullable=0
+        col no_of_employees sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col emp_cnt sql=4 prec=10,0 nullable=0
+
+STAGE xfm_Store_SK  [CTransformerStage]
+    in  link lnk_stg_store  <-> src_stg_stores
+    out link lnk_dim_store  <-> cpy_Store
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_stg_store.store_id
+        col store_name sql=12 prec=255,0 nullable=0  := lnk_stg_store.store_name
+        col country sql=12 prec=255,0 nullable=0  := lnk_stg_store.country
+        col channel sql=12 prec=255,0 nullable=0  := lnk_stg_store.channel
+        col rating sql=4 prec=10,0 nullable=0  := lnk_stg_store.rating
+        col no_of_employees sql=4 prec=10,0 nullable=0  := lnk_stg_store.no_of_employees
+        col region sql=12 prec=255,0 nullable=0  := lnk_stg_store.region
+        col emp_cnt sql=4 prec=10,0 nullable=0  := lnk_stg_store.emp_cnt
+        col store_sk sql=4 prec=10,0 nullable=0  := @PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1
+
+STAGE cpy_Store  [PxCopy]
+    in  link lnk_dim_store  <-> xfm_Store_SK
+    out link lnk_store_out  <-> tgt_dim_store
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_dim_store.store_id
+        col store_name sql=12 prec=255,0 nullable=0  := lnk_dim_store.store_name
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim_store.country
+        col channel sql=12 prec=255,0 nullable=0  := lnk_dim_store.channel
+        col rating sql=4 prec=10,0 nullable=0  := lnk_dim_store.rating
+        col no_of_employees sql=4 prec=10,0 nullable=0  := lnk_dim_store.no_of_employees
+        col region sql=12 prec=255,0 nullable=0  := lnk_dim_store.region
+        col emp_cnt sql=4 prec=10,0 nullable=0  := lnk_dim_store.emp_cnt
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_dim_store.store_sk
+    out link lnk_store_keys_in  <-> xfm_Store_Keys
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_dim_store.store_id
+        col store_name sql=12 prec=255,0 nullable=0  := lnk_dim_store.store_name
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim_store.country
+        col channel sql=12 prec=255,0 nullable=0  := lnk_dim_store.channel
+        col rating sql=4 prec=10,0 nullable=0  := lnk_dim_store.rating
+        col no_of_employees sql=4 prec=10,0 nullable=0  := lnk_dim_store.no_of_employees
+        col region sql=12 prec=255,0 nullable=0  := lnk_dim_store.region
+        col emp_cnt sql=4 prec=10,0 nullable=0  := lnk_dim_store.emp_cnt
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_dim_store.store_sk
+
+STAGE tgt_dim_store  [PxSequentialFile]
+    in  link lnk_store_out  <-> cpy_Store
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_store.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE xfm_Store_Keys  [CTransformerStage]
+    in  link lnk_store_keys_in  <-> cpy_Store
+    out link lnk_store_keys  <-> jn_Emp_Store
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_store_keys_in.store_id
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_store_keys_in.store_sk
+
+STAGE src_stg_employees  [PxSequentialFile]
+    out link lnk_stg_emp  <-> jn_Emp_Store
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pStgDir#/stg_employees.csv\(2)0
+        col employee_id sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col employee_name sql=12 prec=255,0 nullable=0
+        col role sql=12 prec=255,0 nullable=0
+        col hire_date sql=9 prec=10,0 nullable=0
+        col tenure_years sql=4 prec=10,0 nullable=0
+
+STAGE jn_Emp_Store  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)store_id\(2)0
+    in  link lnk_stg_emp  <-> src_stg_employees
+    in  link lnk_store_keys  <-> xfm_Store_Keys
+    out link lnk_emp_store  <-> xfm_Emp_SK
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_stg_emp.employee_id
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_stg_emp.store_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_stg_emp.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_stg_emp.role
+        col hire_date sql=9 prec=10,0 nullable=0  := lnk_stg_emp.hire_date
+        col tenure_years sql=4 prec=10,0 nullable=0  := lnk_stg_emp.tenure_years
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_store_keys.store_sk
+
+STAGE xfm_Emp_SK  [CTransformerStage]
+    in  link lnk_emp_store  <-> jn_Emp_Store
+    out link lnk_dim_emp  <-> tgt_dim_employee
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_emp_store.employee_id
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_emp_store.store_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_emp_store.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_emp_store.role
+        col hire_date sql=9 prec=10,0 nullable=0  := lnk_emp_store.hire_date
+        col tenure_years sql=4 prec=10,0 nullable=0  := lnk_emp_store.tenure_years
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_emp_store.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := @PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1
+
+STAGE tgt_dim_employee  [PxSequentialFile]
+    in  link lnk_dim_emp  <-> xfm_Emp_SK
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_employee.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

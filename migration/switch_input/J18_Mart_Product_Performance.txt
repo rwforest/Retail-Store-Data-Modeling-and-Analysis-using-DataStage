@@ -1,0 +1,240 @@
+DATASTAGE PARALLEL JOB: J18_Mart_Product_Performance
+Description: Product performance: revenue, margin, return rate, ABC class
+Folder: \\Retail_DW\\Pipeline\\4_Marts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_fact_sales  [PxSequentialFile]
+    out link lnk_fact  <-> agg_Product_Sales
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_sales.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+
+STAGE agg_Product_Sales  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)product_sk\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)quantity\(2)0\(1)\(3)\(3)sum\(2)units_sold\(2)0\(1)\(3)reduce\(2)sales_amount\(2)0\(1)\(3)\(3)sum\(2)revenue\(2)0\(1)\(3)reduce\(2)gross_profit\(2)0\(1)\(3)\(3)sum\(2)profit\(2)0
+    in  link lnk_fact  <-> src_fact_sales
+    out link lnk_sales  <-> jn_Sales_Returns
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_fact.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0
+        col revenue sql=3 prec=18,2 nullable=0
+        col profit sql=3 prec=18,2 nullable=0
+
+STAGE src_fact_returns  [PxSequentialFile]
+    out link lnk_ret  <-> agg_Product_Returns
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_returns.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col returned_qty sql=4 prec=10,0 nullable=0
+        col returned_amount sql=3 prec=18,2 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+
+STAGE agg_Product_Returns  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)product_sk\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)returned_amount\(2)0\(1)\(3)\(3)sum\(2)returned\(2)0
+    in  link lnk_ret  <-> src_fact_returns
+    out link lnk_ret_agg  <-> jn_Sales_Returns
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_ret.product_sk
+        col returned sql=3 prec=18,2 nullable=0
+
+STAGE jn_Sales_Returns  [PxJoin]
+    property operator = leftouterjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)product_sk\(2)0
+    in  link lnk_sales  <-> agg_Product_Sales
+    in  link lnk_ret_agg  <-> agg_Product_Returns
+    out link lnk_sr  <-> xfm_Returns_Defaults
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_sales.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_sales.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_sales.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_sales.profit
+        col returned sql=3 prec=18,2 nullable=1  := lnk_ret_agg.returned
+
+STAGE xfm_Returns_Defaults  [CTransformerStage]
+    in  link lnk_sr  <-> jn_Sales_Returns
+    out link lnk_sr_nn  <-> xfm_KPIs
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_sr.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_sr.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_sr.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_sr.profit
+        col returned sql=3 prec=18,2 nullable=0  := NullToValue(lnk_sr.returned, 0)
+
+STAGE xfm_KPIs  [CTransformerStage]
+    in  link lnk_sr_nn  <-> xfm_Returns_Defaults
+    out link lnk_kpi  <-> jn_Product
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_sr_nn.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_sr_nn.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_sr_nn.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_sr_nn.profit
+        col returned sql=3 prec=18,2 nullable=0  := lnk_sr_nn.returned
+        col return_rate sql=3 prec=18,6 nullable=0  := If lnk_sr_nn.revenue > 0 Then lnk_sr_nn.returned / lnk_sr_nn.revenue Else 0
+        col margin_pct sql=3 prec=18,6 nullable=0  := If lnk_sr_nn.revenue > 0 Then lnk_sr_nn.profit / lnk_sr_nn.revenue Else 0
+        col abc_class sql=12 prec=255,0 nullable=0  := If lnk_sr_nn.revenue >= 5000 Then "A" Else If lnk_sr_nn.revenue >= 1000 Then "B" Else "C"
+
+STAGE src_dim_product  [PxSequentialFile]
+    out link lnk_dim_product  <-> jn_Product
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_product.csv\(2)0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col product_name sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col list_price sql=3 prec=18,2 nullable=0
+        col supplier_id sql=12 prec=255,0 nullable=0
+        col status sql=12 prec=255,0 nullable=0
+        col unit_cost sql=3 prec=18,2 nullable=0
+        col price_band sql=12 prec=255,0 nullable=0
+        col supplier_name sql=12 prec=255,0 nullable=0
+        col supplier_country sql=12 prec=255,0 nullable=0
+        col lead_time_days sql=4 prec=10,0 nullable=0
+        col reliability_score sql=3 prec=18,2 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col category_group sql=12 prec=255,0 nullable=0
+
+STAGE jn_Product  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)product_sk\(2)0
+    in  link lnk_kpi  <-> xfm_KPIs
+    in  link lnk_dim_product  <-> src_dim_product
+    out link lnk_named  <-> srt_Revenue
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_kpi.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_kpi.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_kpi.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_kpi.profit
+        col returned sql=3 prec=18,2 nullable=0  := lnk_kpi.returned
+        col return_rate sql=3 prec=18,6 nullable=0  := lnk_kpi.return_rate
+        col margin_pct sql=3 prec=18,6 nullable=0  := lnk_kpi.margin_pct
+        col abc_class sql=12 prec=255,0 nullable=0  := lnk_kpi.abc_class
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dim_product.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_dim_product.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_dim_product.category
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_dim_product.supplier_name
+
+STAGE srt_Revenue  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)revenue\(2)0\(1)\(3)\(3)asc\\desc\(2)desc\(2)0
+    in  link lnk_named  <-> jn_Product
+    out link lnk_sorted  <-> cpy_Perf
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_named.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_named.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_named.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_named.profit
+        col returned sql=3 prec=18,2 nullable=0  := lnk_named.returned
+        col return_rate sql=3 prec=18,6 nullable=0  := lnk_named.return_rate
+        col margin_pct sql=3 prec=18,6 nullable=0  := lnk_named.margin_pct
+        col abc_class sql=12 prec=255,0 nullable=0  := lnk_named.abc_class
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_named.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_named.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_named.category
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_named.supplier_name
+
+STAGE cpy_Perf  [PxCopy]
+    in  link lnk_sorted  <-> srt_Revenue
+    out link lnk_all  <-> tgt_mart_product_performance
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_sorted.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_sorted.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_sorted.profit
+        col returned sql=3 prec=18,2 nullable=0  := lnk_sorted.returned
+        col return_rate sql=3 prec=18,6 nullable=0  := lnk_sorted.return_rate
+        col margin_pct sql=3 prec=18,6 nullable=0  := lnk_sorted.margin_pct
+        col abc_class sql=12 prec=255,0 nullable=0  := lnk_sorted.abc_class
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_sorted.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_sorted.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_sorted.category
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_sorted.supplier_name
+    out link lnk_top_in  <-> hd_Top50
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_sorted.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_sorted.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_sorted.profit
+        col returned sql=3 prec=18,2 nullable=0  := lnk_sorted.returned
+        col return_rate sql=3 prec=18,6 nullable=0  := lnk_sorted.return_rate
+        col margin_pct sql=3 prec=18,6 nullable=0  := lnk_sorted.margin_pct
+        col abc_class sql=12 prec=255,0 nullable=0  := lnk_sorted.abc_class
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_sorted.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_sorted.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_sorted.category
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_sorted.supplier_name
+
+STAGE tgt_mart_product_performance  [PxSequentialFile]
+    in  link lnk_all  <-> cpy_Perf
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Product_Performance.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE hd_Top50  [PxHead]
+    property nrecs = 50
+    property selection = part
+    property part = \(2)\(2)0\(1)\(3)part\(2)0\(2)0
+    in  link lnk_top_in  <-> cpy_Perf
+    out link lnk_top50  <-> tgt_top50_products
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_top_in.product_sk
+        col units_sold sql=-5 prec=19,0 nullable=0  := lnk_top_in.units_sold
+        col revenue sql=3 prec=18,2 nullable=0  := lnk_top_in.revenue
+        col profit sql=3 prec=18,2 nullable=0  := lnk_top_in.profit
+        col returned sql=3 prec=18,2 nullable=0  := lnk_top_in.returned
+        col return_rate sql=3 prec=18,6 nullable=0  := lnk_top_in.return_rate
+        col margin_pct sql=3 prec=18,6 nullable=0  := lnk_top_in.margin_pct
+        col abc_class sql=12 prec=255,0 nullable=0  := lnk_top_in.abc_class
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_top_in.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_top_in.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_top_in.category
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_top_in.supplier_name
+
+STAGE tgt_top50_products  [PxSequentialFile]
+    in  link lnk_top50  <-> hd_Top50
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Product_Top50.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

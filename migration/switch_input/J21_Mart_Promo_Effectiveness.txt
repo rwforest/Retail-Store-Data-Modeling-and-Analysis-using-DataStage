@@ -1,0 +1,138 @@
+DATASTAGE PARALLEL JOB: J21_Mart_Promo_Effectiveness
+Description: Sales inside each promotion window (range join on category + date)
+Folder: \\Retail_DW\\Pipeline\\4_Marts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_fact_sales  [PxSequentialFile]
+    out link lnk_fact  <-> jn_Promo_Category
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_sales.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+
+STAGE src_dim_promotion  [PxSequentialFile]
+    out link lnk_dim_promo  <-> jn_Promo_Category
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_promotion.csv\(2)0
+        col promo_sk sql=4 prec=10,0 nullable=0
+        col promo_id sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col start_date sql=9 prec=10,0 nullable=0
+        col end_date sql=9 prec=10,0 nullable=0
+        col discount_pct sql=4 prec=10,0 nullable=0
+        col duration_days sql=4 prec=10,0 nullable=0
+        col start_key sql=4 prec=10,0 nullable=0
+        col end_key sql=4 prec=10,0 nullable=0
+
+STAGE jn_Promo_Category  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)category\(2)0
+    in  link lnk_fact  <-> src_fact_sales
+    in  link lnk_dim_promo  <-> src_dim_promotion
+    out link lnk_fp  <-> flt_In_Window
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fact.invoice_date_key
+        col category sql=12 prec=255,0 nullable=0  := lnk_fact.category
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_fact.sales_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_fact.gross_profit
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_fact.line_cnt
+        col promo_id sql=12 prec=255,0 nullable=0  := lnk_dim_promo.promo_id
+        col discount_pct sql=4 prec=10,0 nullable=0  := lnk_dim_promo.discount_pct
+        col start_key sql=4 prec=10,0 nullable=0  := lnk_dim_promo.start_key
+        col end_key sql=4 prec=10,0 nullable=0  := lnk_dim_promo.end_key
+
+STAGE flt_In_Window  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)invoice_date_key >= start_key and invoice_date_key <= end_key\(2)0
+    in  link lnk_fp  <-> jn_Promo_Category
+    out link lnk_window  <-> agg_By_Promo
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fp.invoice_date_key
+        col category sql=12 prec=255,0 nullable=0  := lnk_fp.category
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_fp.sales_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_fp.gross_profit
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_fp.line_cnt
+        col promo_id sql=12 prec=255,0 nullable=0  := lnk_fp.promo_id
+        col discount_pct sql=4 prec=10,0 nullable=0  := lnk_fp.discount_pct
+        col start_key sql=4 prec=10,0 nullable=0  := lnk_fp.start_key
+        col end_key sql=4 prec=10,0 nullable=0  := lnk_fp.end_key
+
+STAGE agg_By_Promo  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)promo_id\(2)0\(1)\(3)key\(2)category\(2)0\(1)\(3)key\(2)discount_pct\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)sales_amount\(2)0\(1)\(3)\(3)sum\(2)promo_sales\(2)0\(1)\(3)reduce\(2)gross_profit\(2)0\(1)\(3)\(3)sum\(2)promo_profit\(2)0\(1)\(3)reduce\(2)line_cnt\(2)0\(1)\(3)\(3)sum\(2)promo_lines\(2)0
+    in  link lnk_window  <-> flt_In_Window
+    out link lnk_promo  <-> xfm_Discount_Cost
+        col promo_id sql=12 prec=255,0 nullable=0  := lnk_window.promo_id
+        col category sql=12 prec=255,0 nullable=0  := lnk_window.category
+        col discount_pct sql=4 prec=10,0 nullable=0  := lnk_window.discount_pct
+        col promo_sales sql=3 prec=18,2 nullable=0
+        col promo_profit sql=3 prec=18,2 nullable=0
+        col promo_lines sql=-5 prec=19,0 nullable=0
+
+STAGE xfm_Discount_Cost  [CTransformerStage]
+    in  link lnk_promo  <-> agg_By_Promo
+    out link lnk_cost  <-> srt_Promo
+        col promo_id sql=12 prec=255,0 nullable=0  := lnk_promo.promo_id
+        col category sql=12 prec=255,0 nullable=0  := lnk_promo.category
+        col discount_pct sql=4 prec=10,0 nullable=0  := lnk_promo.discount_pct
+        col promo_sales sql=3 prec=18,2 nullable=0  := lnk_promo.promo_sales
+        col promo_profit sql=3 prec=18,2 nullable=0  := lnk_promo.promo_profit
+        col promo_lines sql=-5 prec=19,0 nullable=0  := lnk_promo.promo_lines
+        col est_discount_cost sql=3 prec=18,2 nullable=0  := lnk_promo.promo_sales * lnk_promo.discount_pct / 100
+        col profit_after_discount sql=3 prec=18,2 nullable=0  := lnk_promo.promo_profit - (lnk_promo.promo_sales * lnk_promo.discount_pct / 100)
+
+STAGE srt_Promo  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)profit_after_discount\(2)0\(1)\(3)\(3)asc\\desc\(2)desc\(2)0
+    in  link lnk_cost  <-> xfm_Discount_Cost
+    out link lnk_sorted  <-> tgt_mart_promo_effectiveness
+        col promo_id sql=12 prec=255,0 nullable=0  := lnk_cost.promo_id
+        col category sql=12 prec=255,0 nullable=0  := lnk_cost.category
+        col discount_pct sql=4 prec=10,0 nullable=0  := lnk_cost.discount_pct
+        col promo_sales sql=3 prec=18,2 nullable=0  := lnk_cost.promo_sales
+        col promo_profit sql=3 prec=18,2 nullable=0  := lnk_cost.promo_profit
+        col promo_lines sql=-5 prec=19,0 nullable=0  := lnk_cost.promo_lines
+        col est_discount_cost sql=3 prec=18,2 nullable=0  := lnk_cost.est_discount_cost
+        col profit_after_discount sql=3 prec=18,2 nullable=0  := lnk_cost.profit_after_discount
+
+STAGE tgt_mart_promo_effectiveness  [PxSequentialFile]
+    in  link lnk_sorted  <-> srt_Promo
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Promo_Effectiveness.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

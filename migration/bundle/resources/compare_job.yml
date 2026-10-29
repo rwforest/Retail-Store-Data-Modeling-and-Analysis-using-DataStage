@@ -1,0 +1,25 @@
+resources:
+  jobs:
+    retail_dw_compare:
+      name: Compare compiled vs Switch outputs (${bundle.target})
+      description: Table-by-table comparison of the two migrated pipeline runs (strict EXCEPT ALL + DQX compare_datasets)
+      parameters:
+        - {name: catalog, default: '${var.catalog}'}
+        - {name: left_schema, default: retail_dw_compiled}
+        - {name: right_schema, default: retail_dw_switch}
+        - {name: out_schema, default: retail_dw_compare}
+      environments:
+        - environment_key: dqx
+          spec:
+            environment_version: '5'
+            dependencies: ['databricks-labs-dqx==0.17.0']
+      tasks:
+        - task_key: compare
+          environment_key: dqx
+          notebook_task:
+            notebook_path: ../src/notebooks/_compare_outputs.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              left_schema: '{{job.parameters.left_schema}}'
+              right_schema: '{{job.parameters.right_schema}}'
+              out_schema: '{{job.parameters.out_schema}}'

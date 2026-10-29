@@ -1,0 +1,139 @@
+DATASTAGE PARALLEL JOB: J02_Land_Customers
+Description: Land the two customer snapshots, standardise and hash tracked attributes
+Folder: \\Retail_DW\\Pipeline\\1_Land
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_cust_2010  [PxSequentialFile]
+    out link lnk_raw_2010  <-> xfm_Std_Cust_2010
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/customers_snapshot_2010.csv\(2)0
+        col CustomerID sql=4 prec=10,0 nullable=0
+        col CustomerName sql=12 prec=255,0 nullable=0
+        col Gender sql=12 prec=255,0 nullable=0
+        col Age sql=4 prec=10,0 nullable=0
+        col SpendingScore sql=4 prec=10,0 nullable=0
+        col AnnualIncomeK sql=4 prec=10,0 nullable=0
+        col Country sql=12 prec=255,0 nullable=0
+        col CustomerType sql=12 prec=255,0 nullable=0
+        col LoyaltyTier sql=12 prec=255,0 nullable=0
+        col Email sql=12 prec=255,0 nullable=0
+        col City sql=12 prec=255,0 nullable=0
+        col SnapshotDate sql=12 prec=255,0 nullable=0
+
+STAGE xfm_Std_Cust_2010  [CTransformerStage]
+    in  link lnk_raw_2010  <-> src_cust_2010
+    out link lnk_std_2010  <-> rmd_Cust_2010
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_raw_2010.CustomerID
+        col cust_name sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_raw_2010.CustomerName))
+        col gender sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2010.Gender)
+        col age sql=4 prec=10,0 nullable=0  := lnk_raw_2010.Age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_raw_2010.SpendingScore
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_raw_2010.AnnualIncomeK
+        col country sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2010.Country)
+        col customer_type sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2010.CustomerType)
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_raw_2010.LoyaltyTier))
+        col email sql=12 prec=255,0 nullable=0  := Downcase(Trim(lnk_raw_2010.Email))
+        col city sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2010.City)
+        col snapshot_date sql=9 prec=10,0 nullable=0  := StringToDate(lnk_raw_2010.SnapshotDate, "%yyyy-%mm-%dd")
+        col attr_hash sql=-5 prec=19,0 nullable=0  := CRC32(Upcase(Trim(lnk_raw_2010.CustomerName)) : "|" : lnk_raw_2010.Age : "|" : lnk_raw_2010.SpendingScore : "|" : lnk_raw_2010.AnnualIncomeK : "|" : Trim(lnk_raw_2010.Country) : "|" : Upcase(Trim(lnk_raw_2010.LoyaltyTier)) : "|" : Trim(lnk_raw_2010.City) : "|" : Downcase(Trim(lnk_raw_2010.Email)))
+
+STAGE rmd_Cust_2010  [PxRemDup]
+    property keep = first
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    in  link lnk_std_2010  <-> xfm_Std_Cust_2010
+    out link lnk_dedup_2010  <-> tgt_stg_customers_2010
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_std_2010.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_std_2010.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_std_2010.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_std_2010.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_std_2010.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_std_2010.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_std_2010.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_std_2010.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_std_2010.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_std_2010.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_std_2010.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_std_2010.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_std_2010.attr_hash
+
+STAGE tgt_stg_customers_2010  [PxSequentialFile]
+    in  link lnk_dedup_2010  <-> rmd_Cust_2010
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pStgDir#/stg_customers_2010.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE src_cust_2011  [PxSequentialFile]
+    out link lnk_raw_2011  <-> xfm_Std_Cust_2011
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/customers_snapshot_2011.csv\(2)0
+        col CustomerID sql=4 prec=10,0 nullable=0
+        col CustomerName sql=12 prec=255,0 nullable=0
+        col Gender sql=12 prec=255,0 nullable=0
+        col Age sql=4 prec=10,0 nullable=0
+        col SpendingScore sql=4 prec=10,0 nullable=0
+        col AnnualIncomeK sql=4 prec=10,0 nullable=0
+        col Country sql=12 prec=255,0 nullable=0
+        col CustomerType sql=12 prec=255,0 nullable=0
+        col LoyaltyTier sql=12 prec=255,0 nullable=0
+        col Email sql=12 prec=255,0 nullable=0
+        col City sql=12 prec=255,0 nullable=0
+        col SnapshotDate sql=12 prec=255,0 nullable=0
+
+STAGE xfm_Std_Cust_2011  [CTransformerStage]
+    in  link lnk_raw_2011  <-> src_cust_2011
+    out link lnk_std_2011  <-> rmd_Cust_2011
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_raw_2011.CustomerID
+        col cust_name sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_raw_2011.CustomerName))
+        col gender sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2011.Gender)
+        col age sql=4 prec=10,0 nullable=0  := lnk_raw_2011.Age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_raw_2011.SpendingScore
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_raw_2011.AnnualIncomeK
+        col country sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2011.Country)
+        col customer_type sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2011.CustomerType)
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_raw_2011.LoyaltyTier))
+        col email sql=12 prec=255,0 nullable=0  := Downcase(Trim(lnk_raw_2011.Email))
+        col city sql=12 prec=255,0 nullable=0  := Trim(lnk_raw_2011.City)
+        col snapshot_date sql=9 prec=10,0 nullable=0  := StringToDate(lnk_raw_2011.SnapshotDate, "%yyyy-%mm-%dd")
+        col attr_hash sql=-5 prec=19,0 nullable=0  := CRC32(Upcase(Trim(lnk_raw_2011.CustomerName)) : "|" : lnk_raw_2011.Age : "|" : lnk_raw_2011.SpendingScore : "|" : lnk_raw_2011.AnnualIncomeK : "|" : Trim(lnk_raw_2011.Country) : "|" : Upcase(Trim(lnk_raw_2011.LoyaltyTier)) : "|" : Trim(lnk_raw_2011.City) : "|" : Downcase(Trim(lnk_raw_2011.Email)))
+
+STAGE rmd_Cust_2011  [PxRemDup]
+    property keep = first
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    in  link lnk_std_2011  <-> xfm_Std_Cust_2011
+    out link lnk_dedup_2011  <-> tgt_stg_customers_2011
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_std_2011.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_std_2011.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_std_2011.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_std_2011.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_std_2011.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_std_2011.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_std_2011.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_std_2011.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_std_2011.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_std_2011.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_std_2011.city
+        col snapshot_date sql=9 prec=10,0 nullable=0  := lnk_std_2011.snapshot_date
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_std_2011.attr_hash
+
+STAGE tgt_stg_customers_2011  [PxSequentialFile]
+    in  link lnk_dedup_2011  <-> rmd_Cust_2011
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pStgDir#/stg_customers_2011.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

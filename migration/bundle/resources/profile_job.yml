@@ -1,0 +1,22 @@
+resources:
+  jobs:
+    dqx_profile_sources:
+      name: DQX profile DataStage sources (${bundle.target})
+      parameters:
+        - {name: catalog, default: '${var.catalog}'}
+        - {name: schema, default: '${var.schema}'}
+        - {name: src_dir, default: '${var.src_dir}'}
+      environments:
+        - environment_key: dqx
+          spec:
+            environment_version: '5'
+            dependencies: ['databricks-labs-dqx==0.17.0']
+      tasks:
+        - task_key: profile
+          environment_key: dqx
+          notebook_task:
+            notebook_path: ../src/notebooks/_dqx_profile_sources.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'

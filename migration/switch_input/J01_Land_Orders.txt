@@ -1,0 +1,257 @@
+DATASTAGE PARALLEL JOB: J01_Land_Orders
+Description: Land raw Online Retail lines: type, flag, reject, de-duplicate, audit
+Folder: \\Retail_DW\\Pipeline\\1_Land
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_orders_raw  [PxSequentialFile]
+    out link lnk_raw  <-> xfm_Type_Orders
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/orders_raw.csv\(2)0
+        col InvoiceNo sql=12 prec=255,0 nullable=0
+        col StockCode sql=12 prec=255,0 nullable=0
+        col Description sql=12 prec=255,0 nullable=0
+        col Quantity sql=12 prec=255,0 nullable=0
+        col InvoiceDate sql=12 prec=255,0 nullable=0
+        col UnitPrice sql=12 prec=255,0 nullable=0
+        col CustomerID sql=12 prec=255,0 nullable=0
+        col Country sql=12 prec=255,0 nullable=0
+        col StoreID sql=12 prec=255,0 nullable=0
+        col EmployeeID sql=12 prec=255,0 nullable=0
+
+STAGE xfm_Type_Orders  [CTransformerStage]
+    in  link lnk_raw  <-> src_orders_raw
+    out link lnk_typed  <-> cpy_Typed
+        col invoice_no sql=12 prec=255,0 nullable=0  := Trim(lnk_raw.InvoiceNo)
+        col stock_code sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_raw.StockCode))
+        col description sql=12 prec=255,0 nullable=0  := Trim(lnk_raw.Description)
+        col quantity sql=4 prec=10,0 nullable=0  := Trim(lnk_raw.Quantity)
+        col invoice_ts sql=11 prec=26,0 nullable=0  := StringToTimestamp(lnk_raw.InvoiceDate, "%yyyy-%mm-%dd %hh:%nn:%ss")
+        col unit_price sql=3 prec=18,2 nullable=0  := StringToDecimal(Trim(lnk_raw.UnitPrice))
+        col customer_id sql=4 prec=10,0 nullable=0  := If Len(Trim(lnk_raw.CustomerID)) = 0 Then "0" Else Trim(lnk_raw.CustomerID)
+        col country sql=12 prec=255,0 nullable=0  := Trim(lnk_raw.Country)
+        col store_id sql=12 prec=255,0 nullable=0  := Trim(lnk_raw.StoreID)
+        col employee_id sql=12 prec=255,0 nullable=0  := Trim(lnk_raw.EmployeeID)
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := TimestampToString(StringToTimestamp(lnk_raw.InvoiceDate, "%yyyy-%mm-%dd %hh:%nn:%ss"), "%yyyy%mm%dd")
+        col line_amount sql=3 prec=18,2 nullable=0  := StringToDecimal(Trim(lnk_raw.Quantity)) * StringToDecimal(Trim(lnk_raw.UnitPrice))
+        col is_cancel sql=4 prec=10,0 nullable=0  := If Left(Trim(lnk_raw.InvoiceNo), 1) = "C" Then 1 Else 0
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := If Upcase(Trim(lnk_raw.StockCode)) = "POST" Or Upcase(Trim(lnk_raw.StockCode)) = "D" Or Upcase(Trim(lnk_raw.StockCode)) = "M" Or Upcase(Trim(lnk_raw.StockCode)) = "DOT" Or Upcase(Trim(lnk_raw.StockCode)) = "CRUK" Or Upcase(Trim(lnk_raw.StockCode)) = "BANK CHARGES" Or Upcase(Trim(lnk_raw.StockCode)) = "AMAZONFEE" Or Upcase(Trim(lnk_raw.StockCode)) = "S" Or Upcase(Trim(lnk_raw.StockCode)) = "B" Or Upcase(Trim(lnk_raw.StockCode)) = "C2" Or Upcase(Trim(lnk_raw.StockCode)) = "PADS" Or Upcase(Trim(lnk_raw.StockCode)) = "M" Then 1 Else 0
+        col is_guest sql=4 prec=10,0 nullable=0  := If Len(Trim(lnk_raw.CustomerID)) = 0 Then 1 Else 0
+
+STAGE cpy_Typed  [PxCopy]
+    in  link lnk_typed  <-> xfm_Type_Orders
+    out link lnk_typed_ok  <-> flt_Valid_Rows
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_typed.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_typed.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_typed.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_typed.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_typed.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_typed.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_typed.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_typed.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_typed.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_typed.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_typed.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_typed.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_typed.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_typed.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_typed.is_guest
+    out link lnk_typed_bad  <-> flt_Invalid_Rows
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_typed.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_typed.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_typed.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_typed.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_typed.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_typed.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_typed.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_typed.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_typed.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_typed.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_typed.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_typed.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_typed.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_typed.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_typed.is_guest
+
+STAGE flt_Valid_Rows  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)quantity <> 0 and unit_price >= 0\(2)0
+    in  link lnk_typed_ok  <-> cpy_Typed
+    out link lnk_valid  <-> rmd_Dedup_Lines
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_typed_ok.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_typed_ok.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_typed_ok.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_typed_ok.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_typed_ok.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_typed_ok.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_typed_ok.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_typed_ok.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_typed_ok.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_typed_ok.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_typed_ok.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_typed_ok.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_typed_ok.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_typed_ok.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_typed_ok.is_guest
+
+STAGE rmd_Dedup_Lines  [PxRemDup]
+    property keep = first
+    property key = \(2)\(2)0\(1)\(3)key\(2)invoice_no\(2)0\(1)\(3)key\(2)stock_code\(2)0\(1)\(3)key\(2)invoice_ts\(2)0\(1)\(3)key\(2)customer_id\(2)0\(1)\(3)key\(2)quantity\(2)0\(1)\(3)key\(2)unit_price\(2)0
+    in  link lnk_valid  <-> flt_Valid_Rows
+    out link lnk_dedup  <-> cpy_Orders
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_valid.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_valid.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_valid.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_valid.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_valid.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_valid.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_valid.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_valid.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_valid.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_valid.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_valid.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_valid.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_valid.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_valid.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_valid.is_guest
+
+STAGE cpy_Orders  [PxCopy]
+    in  link lnk_dedup  <-> rmd_Dedup_Lines
+    out link lnk_stg  <-> tgt_stg_orders
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_dedup.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_dedup.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_dedup.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_dedup.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_dedup.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dedup.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_dedup.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_dedup.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_dedup.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_dedup.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_dedup.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_dedup.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_dedup.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_dedup.is_guest
+    out link lnk_anom_in  <-> flt_Anomalies
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_dedup.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_dedup.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_dedup.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_dedup.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_dedup.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dedup.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_dedup.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_dedup.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_dedup.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_dedup.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_dedup.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_dedup.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_dedup.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_dedup.is_guest
+    out link lnk_cnt_in  <-> agg_Rows_By_Country
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_dedup.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_dedup.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_dedup.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_dedup.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_dedup.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dedup.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_dedup.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_dedup.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_dedup.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_dedup.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_dedup.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_dedup.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_dedup.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_dedup.is_guest
+
+STAGE tgt_stg_orders  [PxSequentialFile]
+    in  link lnk_stg  <-> cpy_Orders
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pStgDir#/stg_orders.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE flt_Invalid_Rows  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)quantity = 0 or unit_price < 0\(2)0
+    in  link lnk_typed_bad  <-> cpy_Typed
+    out link lnk_invalid  <-> tgt_rej_orders
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_typed_bad.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_typed_bad.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_typed_bad.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_typed_bad.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_typed_bad.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_typed_bad.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_typed_bad.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_typed_bad.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_typed_bad.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_typed_bad.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_typed_bad.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_typed_bad.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_typed_bad.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_typed_bad.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_typed_bad.is_guest
+
+STAGE tgt_rej_orders  [PxSequentialFile]
+    in  link lnk_invalid  <-> flt_Invalid_Rows
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pAuditDir#/rej_orders.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE flt_Anomalies  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)unit_price = 0 or quantity > 5000 or quantity < -5000\(2)0
+    in  link lnk_anom_in  <-> cpy_Orders
+    out link lnk_anom  <-> tgt_dq_order_anomalies
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_anom_in.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_anom_in.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_anom_in.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_anom_in.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_anom_in.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_anom_in.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_anom_in.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_anom_in.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_anom_in.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_anom_in.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_anom_in.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_anom_in.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_anom_in.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_anom_in.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_anom_in.is_guest
+
+STAGE tgt_dq_order_anomalies  [PxSequentialFile]
+    in  link lnk_anom  <-> flt_Anomalies
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pAuditDir#/dq_order_anomalies.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE agg_Rows_By_Country  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)country\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)rows_loaded\(2)0
+    in  link lnk_cnt_in  <-> cpy_Orders
+    out link lnk_rows_by_country  <-> tgt_audit_land_orders
+        col country sql=12 prec=255,0 nullable=0  := lnk_cnt_in.country
+        col rows_loaded sql=4 prec=10,0 nullable=0
+
+STAGE tgt_audit_land_orders  [PxSequentialFile]
+    in  link lnk_rows_by_country  <-> agg_Rows_By_Country
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pAuditDir#/audit_land_orders.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

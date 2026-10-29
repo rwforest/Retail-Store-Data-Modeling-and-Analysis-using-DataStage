@@ -1,0 +1,20 @@
+# OS / Python
+.DS_Store
+__pycache__/
+
+# Separately cloned tool repos (Databricks Labs Lakebridge and DQX) - not part of this project
+/lakebridge/
+/dqx/
+
+# Databricks bundle state
+.databricks/
+
+# Migration: regenerable or third-party artefacts
+migration/xml/
+migration/transpiled/
+migration/switch_input_jobs/
+migration/switch_prompt/_ref/
+migration/switch_prompt/python_builtin.yml
+migration/analysis/*.tmp
+migration/analysis/*.source_file_names.txt
+migration/analysis/*_SQL_TEMP/

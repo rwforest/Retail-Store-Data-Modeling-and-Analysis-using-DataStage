@@ -1,0 +1,24 @@
+bundle:
+  name: retail_dw_migration_switch
+
+variables:
+  catalog:
+    description: Unity Catalog catalog that holds the migrated tables
+  schema:
+    default: retail_dw
+  src_dir:
+    description: UC volume path holding the Source_Data CSVs, e.g. /Volumes/<catalog>/retail_dw/landing
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      profile: DEFAULT
+    variables:
+      catalog: unitygo
+      schema: retail_dw_switch
+      src_dir: /Volumes/unitygo/retail_dw/landing

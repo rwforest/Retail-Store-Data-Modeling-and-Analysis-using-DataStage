@@ -1,0 +1,348 @@
+DATASTAGE PARALLEL JOB: J22_DQ_Fact_Checks
+Description: Row-level data-quality rules on Fact_Sales, one result row per rule
+Folder: \\Retail_DW\\Pipeline\\5_DataQuality
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_fact_sales  [PxSequentialFile]
+    out link lnk_fact  <-> cpy_Fact
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_sales.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+
+STAGE cpy_Fact  [PxCopy]
+    in  link lnk_fact  <-> src_fact_sales
+    out link lnk_chk1  <-> flt_guest_customer_lines
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_fact.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_fact.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_fact.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_fact.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_fact.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_fact.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_fact.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_fact.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fact.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_fact.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_fact.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_fact.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_fact.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_fact.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_fact.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_fact.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_fact.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_fact.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_fact.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_fact.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_fact.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_fact.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_fact.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_fact.line_cnt
+    out link lnk_chk2  <-> flt_orphan_product_lines
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_fact.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_fact.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_fact.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_fact.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_fact.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_fact.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_fact.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_fact.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fact.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_fact.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_fact.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_fact.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_fact.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_fact.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_fact.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_fact.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_fact.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_fact.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_fact.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_fact.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_fact.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_fact.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_fact.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_fact.line_cnt
+    out link lnk_chk3  <-> flt_non_positive_sales
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_fact.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_fact.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_fact.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_fact.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_fact.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_fact.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_fact.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_fact.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fact.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_fact.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_fact.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_fact.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_fact.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_fact.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_fact.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_fact.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_fact.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_fact.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_fact.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_fact.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_fact.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_fact.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_fact.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_fact.line_cnt
+    out link lnk_chk4  <-> flt_negative_gross_profit
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_fact.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_fact.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_fact.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_fact.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_fact.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_fact.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_fact.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_fact.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fact.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_fact.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_fact.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_fact.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_fact.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_fact.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_fact.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_fact.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_fact.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_fact.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_fact.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_fact.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_fact.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_fact.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_fact.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_fact.line_cnt
+
+STAGE flt_guest_customer_lines  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)customer_sk = -1\(2)0
+    in  link lnk_chk1  <-> cpy_Fact
+    out link lnk_hit1  <-> xfm_Tag_guest_customer_lines
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_chk1.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_chk1.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_chk1.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_chk1.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_chk1.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_chk1.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_chk1.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_chk1.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_chk1.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_chk1.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_chk1.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_chk1.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_chk1.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_chk1.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_chk1.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_chk1.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_chk1.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_chk1.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_chk1.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_chk1.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_chk1.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_chk1.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_chk1.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_chk1.line_cnt
+
+STAGE xfm_Tag_guest_customer_lines  [CTransformerStage]
+    in  link lnk_hit1  <-> flt_guest_customer_lines
+    out link lnk_tag1  <-> agg_Count_guest_customer_lines
+        col check_name sql=12 prec=255,0 nullable=0  := "guest_customer_lines"
+
+STAGE agg_Count_guest_customer_lines  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)check_name\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)hits\(2)0
+    in  link lnk_tag1  <-> xfm_Tag_guest_customer_lines
+    out link lnk_cnt1  <-> fnl_Checks
+        col check_name sql=12 prec=255,0 nullable=0  := lnk_tag1.check_name
+        col hits sql=4 prec=10,0 nullable=0
+
+STAGE flt_orphan_product_lines  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)product_sk = -1\(2)0
+    in  link lnk_chk2  <-> cpy_Fact
+    out link lnk_hit2  <-> xfm_Tag_orphan_product_lines
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_chk2.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_chk2.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_chk2.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_chk2.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_chk2.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_chk2.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_chk2.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_chk2.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_chk2.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_chk2.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_chk2.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_chk2.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_chk2.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_chk2.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_chk2.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_chk2.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_chk2.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_chk2.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_chk2.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_chk2.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_chk2.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_chk2.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_chk2.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_chk2.line_cnt
+
+STAGE xfm_Tag_orphan_product_lines  [CTransformerStage]
+    in  link lnk_hit2  <-> flt_orphan_product_lines
+    out link lnk_tag2  <-> agg_Count_orphan_product_lines
+        col check_name sql=12 prec=255,0 nullable=0  := "orphan_product_lines"
+
+STAGE agg_Count_orphan_product_lines  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)check_name\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)hits\(2)0
+    in  link lnk_tag2  <-> xfm_Tag_orphan_product_lines
+    out link lnk_cnt2  <-> fnl_Checks
+        col check_name sql=12 prec=255,0 nullable=0  := lnk_tag2.check_name
+        col hits sql=4 prec=10,0 nullable=0
+
+STAGE flt_non_positive_sales  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)sales_amount <= 0\(2)0
+    in  link lnk_chk3  <-> cpy_Fact
+    out link lnk_hit3  <-> xfm_Tag_non_positive_sales
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_chk3.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_chk3.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_chk3.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_chk3.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_chk3.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_chk3.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_chk3.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_chk3.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_chk3.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_chk3.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_chk3.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_chk3.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_chk3.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_chk3.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_chk3.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_chk3.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_chk3.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_chk3.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_chk3.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_chk3.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_chk3.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_chk3.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_chk3.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_chk3.line_cnt
+
+STAGE xfm_Tag_non_positive_sales  [CTransformerStage]
+    in  link lnk_hit3  <-> flt_non_positive_sales
+    out link lnk_tag3  <-> agg_Count_non_positive_sales
+        col check_name sql=12 prec=255,0 nullable=0  := "non_positive_sales"
+
+STAGE agg_Count_non_positive_sales  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)check_name\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)hits\(2)0
+    in  link lnk_tag3  <-> xfm_Tag_non_positive_sales
+    out link lnk_cnt3  <-> fnl_Checks
+        col check_name sql=12 prec=255,0 nullable=0  := lnk_tag3.check_name
+        col hits sql=4 prec=10,0 nullable=0
+
+STAGE flt_negative_gross_profit  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)gross_profit < 0\(2)0
+    in  link lnk_chk4  <-> cpy_Fact
+    out link lnk_hit4  <-> xfm_Tag_negative_gross_profit
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_chk4.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_chk4.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_chk4.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_chk4.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_chk4.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_chk4.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_chk4.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_chk4.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_chk4.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_chk4.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_chk4.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_chk4.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_chk4.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_chk4.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_chk4.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_chk4.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_chk4.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_chk4.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_chk4.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_chk4.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_chk4.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_chk4.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_chk4.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_chk4.line_cnt
+
+STAGE xfm_Tag_negative_gross_profit  [CTransformerStage]
+    in  link lnk_hit4  <-> flt_negative_gross_profit
+    out link lnk_tag4  <-> agg_Count_negative_gross_profit
+        col check_name sql=12 prec=255,0 nullable=0  := "negative_gross_profit"
+
+STAGE agg_Count_negative_gross_profit  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)check_name\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)hits\(2)0
+    in  link lnk_tag4  <-> xfm_Tag_negative_gross_profit
+    out link lnk_cnt4  <-> fnl_Checks
+        col check_name sql=12 prec=255,0 nullable=0  := lnk_tag4.check_name
+        col hits sql=4 prec=10,0 nullable=0
+
+STAGE fnl_Checks  [PxFunnel]
+    property operator = funnel
+    in  link lnk_cnt1  <-> agg_Count_guest_customer_lines
+    in  link lnk_cnt2  <-> agg_Count_orphan_product_lines
+    in  link lnk_cnt3  <-> agg_Count_non_positive_sales
+    in  link lnk_cnt4  <-> agg_Count_negative_gross_profit
+    out link lnk_all_checks  <-> srt_Checks
+        col check_name sql=12 prec=255,0 nullable=0  := lnk_cnt1.check_name
+        col hits sql=4 prec=10,0 nullable=0  := lnk_cnt1.hits
+
+STAGE srt_Checks  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)check_name\(2)0
+    in  link lnk_all_checks  <-> fnl_Checks
+    out link lnk_sorted  <-> tgt_dq_fact_checks
+        col check_name sql=12 prec=255,0 nullable=0  := lnk_all_checks.check_name
+        col hits sql=4 prec=10,0 nullable=0  := lnk_all_checks.hits
+
+STAGE tgt_dq_fact_checks  [PxSequentialFile]
+    in  link lnk_sorted  <-> srt_Checks
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pAuditDir#/dq_fact_checks.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

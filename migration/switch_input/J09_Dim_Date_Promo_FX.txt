@@ -1,0 +1,133 @@
+DATASTAGE PARALLEL JOB: J09_Dim_Date_Promo_FX
+Description: Build Dim_Date, Dim_Promotion and Dim_FX (country x month)
+Folder: \\Retail_DW\\Pipeline\\2_Dimensions
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_calendar  [PxSequentialFile]
+    out link lnk_cal  <-> xfm_Date_Attrs
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/calendar.csv\(2)0
+        col DateKey sql=4 prec=10,0 nullable=0
+        col FullDate sql=9 prec=10,0 nullable=0
+        col Year sql=4 prec=10,0 nullable=0
+        col Quarter sql=4 prec=10,0 nullable=0
+        col Month sql=4 prec=10,0 nullable=0
+        col MonthName sql=12 prec=255,0 nullable=0
+        col Day sql=4 prec=10,0 nullable=0
+        col DayOfWeekISO sql=4 prec=10,0 nullable=0
+        col IsWeekend sql=4 prec=10,0 nullable=0
+        col IsHoliday sql=4 prec=10,0 nullable=0
+
+STAGE xfm_Date_Attrs  [CTransformerStage]
+    in  link lnk_cal  <-> src_calendar
+    out link lnk_dim_date  <-> tgt_dim_date
+        col date_key sql=4 prec=10,0 nullable=0  := lnk_cal.DateKey
+        col full_date sql=9 prec=10,0 nullable=0  := lnk_cal.FullDate
+        col year sql=4 prec=10,0 nullable=0  := lnk_cal.Year
+        col quarter sql=4 prec=10,0 nullable=0  := lnk_cal.Quarter
+        col month sql=4 prec=10,0 nullable=0  := lnk_cal.Month
+        col month_name sql=12 prec=255,0 nullable=0  := lnk_cal.MonthName
+        col day sql=4 prec=10,0 nullable=0  := lnk_cal.Day
+        col day_of_week sql=4 prec=10,0 nullable=0  := lnk_cal.DayOfWeekISO
+        col year_month sql=12 prec=255,0 nullable=0  := DateToString(lnk_cal.FullDate, "%yyyy%mm")
+        col is_trading_day sql=4 prec=10,0 nullable=0  := If lnk_cal.IsWeekend = 0 And lnk_cal.IsHoliday = 0 Then 1 Else 0
+
+STAGE tgt_dim_date  [PxSequentialFile]
+    in  link lnk_dim_date  <-> xfm_Date_Attrs
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_date.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE src_promotions  [PxSequentialFile]
+    out link lnk_promo  <-> xfm_Promo_SK
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/promotions.csv\(2)0
+        col PromoID sql=12 prec=255,0 nullable=0
+        col Category sql=12 prec=255,0 nullable=0
+        col StartDate sql=9 prec=10,0 nullable=0
+        col EndDate sql=9 prec=10,0 nullable=0
+        col DiscountPct sql=4 prec=10,0 nullable=0
+
+STAGE xfm_Promo_SK  [CTransformerStage]
+    in  link lnk_promo  <-> src_promotions
+    out link lnk_dim_promo  <-> tgt_dim_promotion
+        col promo_sk sql=4 prec=10,0 nullable=0  := @PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1
+        col promo_id sql=12 prec=255,0 nullable=0  := Trim(lnk_promo.PromoID)
+        col category sql=12 prec=255,0 nullable=0  := Trim(lnk_promo.Category)
+        col start_date sql=9 prec=10,0 nullable=0  := lnk_promo.StartDate
+        col end_date sql=9 prec=10,0 nullable=0  := lnk_promo.EndDate
+        col discount_pct sql=4 prec=10,0 nullable=0  := lnk_promo.DiscountPct
+        col duration_days sql=4 prec=10,0 nullable=0  := DaysSinceFromDate(lnk_promo.EndDate, lnk_promo.StartDate) + 1
+        col start_key sql=4 prec=10,0 nullable=0  := DateToString(lnk_promo.StartDate, "%yyyy%mm%dd")
+        col end_key sql=4 prec=10,0 nullable=0  := DateToString(lnk_promo.EndDate, "%yyyy%mm%dd")
+
+STAGE tgt_dim_promotion  [PxSequentialFile]
+    in  link lnk_dim_promo  <-> xfm_Promo_SK
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_promotion.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE src_fx_rates  [PxSequentialFile]
+    out link lnk_fx  <-> jn_Country_FX
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/fx_rates.csv\(2)0
+        col YearMonth sql=12 prec=255,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col RateFromGBP sql=3 prec=18,6 nullable=0
+
+STAGE src_country_currency  [PxSequentialFile]
+    out link lnk_cc  <-> jn_Country_FX
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/country_currency.csv\(2)0
+        col country sql=12 prec=255,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+
+STAGE jn_Country_FX  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)currency\(2)0
+    in  link lnk_cc  <-> src_country_currency
+    in  link lnk_fx  <-> src_fx_rates
+    out link lnk_cc_fx  <-> xfm_FX_Key
+        col country sql=12 prec=255,0 nullable=0  := lnk_cc.country
+        col currency sql=12 prec=255,0 nullable=0  := lnk_cc.currency
+        col YearMonth sql=12 prec=255,0 nullable=0  := lnk_fx.YearMonth
+        col RateFromGBP sql=3 prec=18,6 nullable=0  := lnk_fx.RateFromGBP
+
+STAGE xfm_FX_Key  [CTransformerStage]
+    in  link lnk_cc_fx  <-> jn_Country_FX
+    out link lnk_dim_fx  <-> tgt_dim_fx
+        col country sql=12 prec=255,0 nullable=0  := Trim(lnk_cc_fx.country)
+        col year_month sql=12 prec=255,0 nullable=0  := Ereplace(lnk_cc_fx.YearMonth, "-", "")
+        col currency sql=12 prec=255,0 nullable=0  := lnk_cc_fx.currency
+        col fx_rate sql=3 prec=18,6 nullable=0  := lnk_cc_fx.RateFromGBP
+
+STAGE tgt_dim_fx  [PxSequentialFile]
+    in  link lnk_dim_fx  <-> xfm_FX_Key
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_fx.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

@@ -1,0 +1,358 @@
+resources:
+  jobs:
+    retail_dw_master:
+      name: Seq_Retail_DW_Master SWITCH (${bundle.target})
+      description: Migrated DataStage master sequence (23 parallel jobs) with DQX validation
+      parameters:
+        - {name: catalog, default: '${var.catalog}'}
+        - {name: schema, default: '${var.schema}'}
+        - {name: src_dir, default: '${var.src_dir}'}
+        - {name: pRunDate, default: '2011-12-31'}
+        - {name: pEffDate, default: '2011-07-01'}
+      environments:
+        - environment_key: dqx
+          spec:
+            environment_version: '5'
+            dependencies: ['databricks-labs-dqx==0.17.0']
+      tasks:
+        - task_key: setup
+          notebook_task:
+            notebook_path: ../src/notebooks/_setup.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J01_Land_Orders
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../src/notebooks/J01_Land_Orders.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J02_Land_Customers
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../src/notebooks/J02_Land_Customers.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J03_Land_Products
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../src/notebooks/J03_Land_Products.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J04_Land_Stores_Employees
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../src/notebooks/J04_Land_Stores_Employees.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: check_dim_customer
+          depends_on:
+            - task_key: J01_Land_Orders
+            - task_key: J02_Land_Customers
+            - task_key: J03_Land_Products
+            - task_key: J04_Land_Stores_Employees
+          notebook_task:
+            notebook_path: ../src/notebooks/_check_dim_customer.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: cond_dim_missing
+          depends_on:
+            - task_key: check_dim_customer
+          condition_task:
+            op: EQUAL_TO
+            left: '{{tasks.check_dim_customer.values.dim_state}}'
+            right: MISSING
+        - task_key: J05_Dim_Customer_Initial
+          depends_on:
+            - task_key: cond_dim_missing
+              outcome: 'true'
+          notebook_task:
+            notebook_path: ../src/notebooks/J05_Dim_Customer_Initial.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J06_Dim_Customer_SCD2
+          depends_on:
+            - task_key: J05_Dim_Customer_Initial
+            - task_key: check_dim_customer
+          notebook_task:
+            notebook_path: ../src/notebooks/J06_Dim_Customer_SCD2.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+          run_if: NONE_FAILED
+        - task_key: promote_dim_customer
+          depends_on:
+            - task_key: J06_Dim_Customer_SCD2
+          notebook_task:
+            notebook_path: ../src/notebooks/_promote_dim_customer.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J07_Dim_Product
+          depends_on:
+            - task_key: J01_Land_Orders
+            - task_key: J02_Land_Customers
+            - task_key: J03_Land_Products
+            - task_key: J04_Land_Stores_Employees
+          notebook_task:
+            notebook_path: ../src/notebooks/J07_Dim_Product.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J08_Dim_Store_Employee
+          depends_on:
+            - task_key: J01_Land_Orders
+            - task_key: J02_Land_Customers
+            - task_key: J03_Land_Products
+            - task_key: J04_Land_Stores_Employees
+          notebook_task:
+            notebook_path: ../src/notebooks/J08_Dim_Store_Employee.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J09_Dim_Date_Promo_FX
+          depends_on:
+            - task_key: J01_Land_Orders
+            - task_key: J02_Land_Customers
+            - task_key: J03_Land_Products
+            - task_key: J04_Land_Stores_Employees
+          notebook_task:
+            notebook_path: ../src/notebooks/J09_Dim_Date_Promo_FX.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J10_Fact_Sales
+          depends_on:
+            - task_key: promote_dim_customer
+            - task_key: J07_Dim_Product
+            - task_key: J08_Dim_Store_Employee
+            - task_key: J09_Dim_Date_Promo_FX
+          notebook_task:
+            notebook_path: ../src/notebooks/J10_Fact_Sales.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J11_Fact_Returns
+          depends_on:
+            - task_key: promote_dim_customer
+            - task_key: J07_Dim_Product
+            - task_key: J08_Dim_Store_Employee
+            - task_key: J09_Dim_Date_Promo_FX
+          notebook_task:
+            notebook_path: ../src/notebooks/J11_Fact_Returns.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J12_Fact_Invoice
+          depends_on:
+            - task_key: J10_Fact_Sales
+          notebook_task:
+            notebook_path: ../src/notebooks/J12_Fact_Invoice.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J13_Mart_RETAIL_DATA_MART
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J13_Mart_RETAIL_DATA_MART.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J14_Analysis_Employee_Transactions
+          depends_on:
+            - task_key: J13_Mart_RETAIL_DATA_MART
+          notebook_task:
+            notebook_path: ../src/notebooks/J14_Analysis_Employee_Transactions.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J15_Analysis_CustomerType_Profit
+          depends_on:
+            - task_key: J13_Mart_RETAIL_DATA_MART
+          notebook_task:
+            notebook_path: ../src/notebooks/J15_Analysis_CustomerType_Profit.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J16_Bonus_Program
+          depends_on:
+            - task_key: J13_Mart_RETAIL_DATA_MART
+          notebook_task:
+            notebook_path: ../src/notebooks/J16_Bonus_Program.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J17_Mart_Customer_360
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J17_Mart_Customer_360.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J18_Mart_Product_Performance
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J18_Mart_Product_Performance.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J19_Mart_Basket_Affinity
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J19_Mart_Basket_Affinity.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J20_Mart_Store_Monthly
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J20_Mart_Store_Monthly.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J21_Mart_Promo_Effectiveness
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J21_Mart_Promo_Effectiveness.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J22_DQ_Fact_Checks
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J22_DQ_Fact_Checks.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: J23_Reconcile_Source_To_Fact
+          depends_on:
+            - task_key: J11_Fact_Returns
+            - task_key: J12_Fact_Invoice
+          notebook_task:
+            notebook_path: ../src/notebooks/J23_Reconcile_Source_To_Fact.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+        - task_key: dqx_validate
+          depends_on:
+            - task_key: J14_Analysis_Employee_Transactions
+            - task_key: J15_Analysis_CustomerType_Profit
+            - task_key: J16_Bonus_Program
+            - task_key: J17_Mart_Customer_360
+            - task_key: J18_Mart_Product_Performance
+            - task_key: J19_Mart_Basket_Affinity
+            - task_key: J20_Mart_Store_Monthly
+            - task_key: J21_Mart_Promo_Effectiveness
+            - task_key: J22_DQ_Fact_Checks
+            - task_key: J23_Reconcile_Source_To_Fact
+          notebook_task:
+            notebook_path: ../src/notebooks/_dqx_validate.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+              src_dir: '{{job.parameters.src_dir}}'
+              pRunDate: '{{job.parameters.pRunDate}}'
+              pEffDate: '{{job.parameters.pEffDate}}'
+          environment_key: dqx

@@ -1,0 +1,185 @@
+DATASTAGE SEQUENCE JOB: Seq_Retail_DW_Master
+Description: Master sequence: land -> dimensions -> facts -> marts -> DQ, with failure notification
+Folder: \\Retail_DW\\Pipeline\\0_Control
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE act_Prepare_Dirs  [CJSExecCmdActivity]
+    out link OK  <-> wff_Source_Orders
+
+STAGE wff_Source_Orders  [CJSWaitForFileActivity]
+    in  link act_Prepare_Dirs_to_wff_Source_Orders  <-> act_Prepare_Dirs
+    out link OK  <-> run_J01_Land_Orders
+    out link OK  <-> run_J02_Land_Customers
+    out link OK  <-> run_J03_Land_Products
+    out link OK  <-> run_J04_Land_Stores_Employees
+
+STAGE run_J01_Land_Orders  [CJSJobActivity]
+    in  link wff_Source_Orders_to_run_J01_Land_Orders  <-> wff_Source_Orders
+    out link OK  <-> seq_Land_Done
+
+STAGE run_J02_Land_Customers  [CJSJobActivity]
+    in  link wff_Source_Orders_to_run_J02_Land_Customers  <-> wff_Source_Orders
+    out link OK  <-> seq_Land_Done
+
+STAGE run_J03_Land_Products  [CJSJobActivity]
+    in  link wff_Source_Orders_to_run_J03_Land_Products  <-> wff_Source_Orders
+    out link OK  <-> seq_Land_Done
+
+STAGE run_J04_Land_Stores_Employees  [CJSJobActivity]
+    in  link wff_Source_Orders_to_run_J04_Land_Stores_Employees  <-> wff_Source_Orders
+    out link OK  <-> seq_Land_Done
+
+STAGE seq_Land_Done  [CJSSequencer]
+    in  link run_J01_Land_Orders_to_seq_Land_Done  <-> run_J01_Land_Orders
+    in  link run_J02_Land_Customers_to_seq_Land_Done  <-> run_J02_Land_Customers
+    in  link run_J03_Land_Products_to_seq_Land_Done  <-> run_J03_Land_Products
+    in  link run_J04_Land_Stores_Employees_to_seq_Land_Done  <-> run_J04_Land_Stores_Employees
+    out link OK  <-> act_Check_Dim_Customer
+    out link OK  <-> run_J07_Dim_Product
+    out link OK  <-> run_J08_Dim_Store_Employee
+    out link OK  <-> run_J09_Dim_Date_Promo_FX
+
+STAGE act_Check_Dim_Customer  [CJSExecCmdActivity]
+    in  link seq_Land_Done_to_act_Check_Dim_Customer  <-> seq_Land_Done
+    out link Conditional  <-> run_J05_Dim_Customer_Initial
+    out link Otherwise  <-> seq_Dim_Customer_Ready
+
+STAGE run_J05_Dim_Customer_Initial  [CJSJobActivity]
+    in  link act_Check_Dim_Customer_to_run_J05_Dim_Customer_Initial  <-> act_Check_Dim_Customer
+    out link OK  <-> seq_Dim_Customer_Ready
+
+STAGE seq_Dim_Customer_Ready  [CJSSequencer]
+    in  link run_J05_Dim_Customer_Initial_to_seq_Dim_Customer_Ready  <-> run_J05_Dim_Customer_Initial
+    in  link act_Check_Dim_Customer_to_seq_Dim_Customer_Ready  <-> act_Check_Dim_Customer
+    out link OK  <-> run_J06_Dim_Customer_SCD2
+
+STAGE run_J06_Dim_Customer_SCD2  [CJSJobActivity]
+    in  link seq_Dim_Customer_Ready_to_run_J06_Dim_Customer_SCD2  <-> seq_Dim_Customer_Ready
+    out link OK  <-> act_Promote_Dim_Customer
+
+STAGE act_Promote_Dim_Customer  [CJSExecCmdActivity]
+    in  link run_J06_Dim_Customer_SCD2_to_act_Promote_Dim_Customer  <-> run_J06_Dim_Customer_SCD2
+    out link OK  <-> seq_Dims_Done
+
+STAGE run_J07_Dim_Product  [CJSJobActivity]
+    in  link seq_Land_Done_to_run_J07_Dim_Product  <-> seq_Land_Done
+    out link OK  <-> seq_Dims_Done
+
+STAGE run_J08_Dim_Store_Employee  [CJSJobActivity]
+    in  link seq_Land_Done_to_run_J08_Dim_Store_Employee  <-> seq_Land_Done
+    out link OK  <-> seq_Dims_Done
+
+STAGE run_J09_Dim_Date_Promo_FX  [CJSJobActivity]
+    in  link seq_Land_Done_to_run_J09_Dim_Date_Promo_FX  <-> seq_Land_Done
+    out link OK  <-> seq_Dims_Done
+
+STAGE seq_Dims_Done  [CJSSequencer]
+    in  link act_Promote_Dim_Customer_to_seq_Dims_Done  <-> act_Promote_Dim_Customer
+    in  link run_J07_Dim_Product_to_seq_Dims_Done  <-> run_J07_Dim_Product
+    in  link run_J08_Dim_Store_Employee_to_seq_Dims_Done  <-> run_J08_Dim_Store_Employee
+    in  link run_J09_Dim_Date_Promo_FX_to_seq_Dims_Done  <-> run_J09_Dim_Date_Promo_FX
+    out link OK  <-> run_J10_Fact_Sales
+    out link OK  <-> run_J11_Fact_Returns
+
+STAGE run_J10_Fact_Sales  [CJSJobActivity]
+    in  link seq_Dims_Done_to_run_J10_Fact_Sales  <-> seq_Dims_Done
+    out link OK  <-> run_J12_Fact_Invoice
+
+STAGE run_J11_Fact_Returns  [CJSJobActivity]
+    in  link seq_Dims_Done_to_run_J11_Fact_Returns  <-> seq_Dims_Done
+    out link OK  <-> seq_Facts_Done
+
+STAGE run_J12_Fact_Invoice  [CJSJobActivity]
+    in  link run_J10_Fact_Sales_to_run_J12_Fact_Invoice  <-> run_J10_Fact_Sales
+    out link OK  <-> seq_Facts_Done
+
+STAGE seq_Facts_Done  [CJSSequencer]
+    in  link run_J11_Fact_Returns_to_seq_Facts_Done  <-> run_J11_Fact_Returns
+    in  link run_J12_Fact_Invoice_to_seq_Facts_Done  <-> run_J12_Fact_Invoice
+    out link OK  <-> run_J13_Mart_RETAIL_DATA_MART
+    out link OK  <-> run_J17_Mart_Customer_360
+    out link OK  <-> run_J18_Mart_Product_Performance
+    out link OK  <-> run_J19_Mart_Basket_Affinity
+    out link OK  <-> run_J20_Mart_Store_Monthly
+    out link OK  <-> run_J21_Mart_Promo_Effectiveness
+    out link OK  <-> run_J22_DQ_Fact_Checks
+    out link OK  <-> run_J23_Reconcile_Source_To_Fact
+
+STAGE run_J13_Mart_RETAIL_DATA_MART  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J13_Mart_RETAIL_DATA_MART  <-> seq_Facts_Done
+    out link OK  <-> run_J14_Analysis_Employee_Transactions
+    out link OK  <-> run_J15_Analysis_CustomerType_Profit
+    out link OK  <-> run_J16_Bonus_Program
+
+STAGE run_J14_Analysis_Employee_Transactions  [CJSJobActivity]
+    in  link run_J13_Mart_RETAIL_DATA_MART_to_run_J14_Analysis_Employee_Transactions  <-> run_J13_Mart_RETAIL_DATA_MART
+    out link OK  <-> seq_All_Done
+
+STAGE run_J15_Analysis_CustomerType_Profit  [CJSJobActivity]
+    in  link run_J13_Mart_RETAIL_DATA_MART_to_run_J15_Analysis_CustomerType_Profit  <-> run_J13_Mart_RETAIL_DATA_MART
+    out link OK  <-> seq_All_Done
+
+STAGE run_J16_Bonus_Program  [CJSJobActivity]
+    in  link run_J13_Mart_RETAIL_DATA_MART_to_run_J16_Bonus_Program  <-> run_J13_Mart_RETAIL_DATA_MART
+    out link OK  <-> seq_All_Done
+
+STAGE run_J17_Mart_Customer_360  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J17_Mart_Customer_360  <-> seq_Facts_Done
+    out link OK  <-> seq_All_Done
+
+STAGE run_J18_Mart_Product_Performance  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J18_Mart_Product_Performance  <-> seq_Facts_Done
+    out link OK  <-> seq_All_Done
+
+STAGE run_J19_Mart_Basket_Affinity  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J19_Mart_Basket_Affinity  <-> seq_Facts_Done
+    out link OK  <-> seq_All_Done
+
+STAGE run_J20_Mart_Store_Monthly  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J20_Mart_Store_Monthly  <-> seq_Facts_Done
+    out link OK  <-> seq_All_Done
+
+STAGE run_J21_Mart_Promo_Effectiveness  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J21_Mart_Promo_Effectiveness  <-> seq_Facts_Done
+    out link OK  <-> seq_All_Done
+
+STAGE run_J22_DQ_Fact_Checks  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J22_DQ_Fact_Checks  <-> seq_Facts_Done
+    out link OK  <-> seq_All_Done
+
+STAGE run_J23_Reconcile_Source_To_Fact  [CJSJobActivity]
+    in  link seq_Facts_Done_to_run_J23_Reconcile_Source_To_Fact  <-> seq_Facts_Done
+    out link OK  <-> seq_All_Done
+
+STAGE seq_All_Done  [CJSSequencer]
+    in  link run_J14_Analysis_Employee_Transactions_to_seq_All_Done  <-> run_J14_Analysis_Employee_Transactions
+    in  link run_J15_Analysis_CustomerType_Profit_to_seq_All_Done  <-> run_J15_Analysis_CustomerType_Profit
+    in  link run_J16_Bonus_Program_to_seq_All_Done  <-> run_J16_Bonus_Program
+    in  link run_J17_Mart_Customer_360_to_seq_All_Done  <-> run_J17_Mart_Customer_360
+    in  link run_J18_Mart_Product_Performance_to_seq_All_Done  <-> run_J18_Mart_Product_Performance
+    in  link run_J19_Mart_Basket_Affinity_to_seq_All_Done  <-> run_J19_Mart_Basket_Affinity
+    in  link run_J20_Mart_Store_Monthly_to_seq_All_Done  <-> run_J20_Mart_Store_Monthly
+    in  link run_J21_Mart_Promo_Effectiveness_to_seq_All_Done  <-> run_J21_Mart_Promo_Effectiveness
+    in  link run_J22_DQ_Fact_Checks_to_seq_All_Done  <-> run_J22_DQ_Fact_Checks
+    in  link run_J23_Reconcile_Source_To_Fact_to_seq_All_Done  <-> run_J23_Reconcile_Source_To_Fact
+    out link OK  <-> act_Notify_Success
+
+STAGE act_Notify_Success  [CJSNotifyActivity]
+    in  link seq_All_Done_to_act_Notify_Success  <-> seq_All_Done
+
+STAGE exc_Any_Failure  [CJSExceptionHandler]
+    out link OK  <-> act_Notify_Failure
+
+STAGE act_Notify_Failure  [CJSNotifyActivity]
+    in  link exc_Any_Failure_to_act_Notify_Failure  <-> exc_Any_Failure
+    out link OK  <-> term_Abort
+
+STAGE term_Abort  [CJSTerminatorActivity]
+    in  link act_Notify_Failure_to_term_Abort  <-> act_Notify_Failure
