@@ -1,0 +1,191 @@
+DATASTAGE PARALLEL JOB: J14_Analysis_Employee_Transactions
+Description: Q1: number of transactions per employee in each store
+Folder: \\Retail_DW\\Pipeline\\4_Marts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_mart  [PxSequentialFile]
+    out link lnk_mart  <-> rmd_Invoices
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pMartDir#/RETAIL_DATA_MART.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col product_name sql=12 prec=255,0 nullable=0
+        col list_price sql=3 prec=18,2 nullable=0
+        col store_name sql=12 prec=255,0 nullable=0
+        col rating sql=4 prec=10,0 nullable=0
+        col no_of_employees sql=4 prec=10,0 nullable=0
+
+STAGE rmd_Invoices  [PxRemDup]
+    property keep = first
+    property key = \(2)\(2)0\(1)\(3)key\(2)store_sk\(2)0\(1)\(3)key\(2)employee_sk\(2)0\(1)\(3)key\(2)invoice_no\(2)0
+    in  link lnk_mart  <-> src_mart
+    out link lnk_invoices  <-> agg_Transactions
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_mart.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_mart.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_mart.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_mart.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_mart.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_mart.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_mart.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_mart.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_mart.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_mart.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_mart.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_mart.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_mart.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_mart.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_mart.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_mart.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_mart.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_mart.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_mart.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_mart.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_mart.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_mart.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_mart.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_mart.line_cnt
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_mart.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_mart.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_mart.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_mart.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_mart.annual_income_k
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_mart.product_name
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_mart.list_price
+        col store_name sql=12 prec=255,0 nullable=0  := lnk_mart.store_name
+        col rating sql=4 prec=10,0 nullable=0  := lnk_mart.rating
+        col no_of_employees sql=4 prec=10,0 nullable=0  := lnk_mart.no_of_employees
+
+STAGE agg_Transactions  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)store_sk\(2)0\(1)\(3)key\(2)employee_sk\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)total_transactions\(2)0
+    in  link lnk_invoices  <-> rmd_Invoices
+    out link lnk_counts  <-> jn_Employee
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_invoices.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_invoices.employee_sk
+        col total_transactions sql=4 prec=10,0 nullable=0
+
+STAGE src_dim_employee  [PxSequentialFile]
+    out link lnk_dim_emp  <-> jn_Employee
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_employee.csv\(2)0
+        col employee_id sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col employee_name sql=12 prec=255,0 nullable=0
+        col role sql=12 prec=255,0 nullable=0
+        col hire_date sql=9 prec=10,0 nullable=0
+        col tenure_years sql=4 prec=10,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+
+STAGE jn_Employee  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)employee_sk\(2)0
+    in  link lnk_counts  <-> agg_Transactions
+    in  link lnk_dim_emp  <-> src_dim_employee
+    out link lnk_named  <-> srt_Store_Rank
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_counts.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_counts.employee_sk
+        col total_transactions sql=4 prec=10,0 nullable=0  := lnk_counts.total_transactions
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_dim_emp.employee_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_dim_emp.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_dim_emp.role
+
+STAGE srt_Store_Rank  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)store_sk\(2)0\(1)\(3)key\(2)total_transactions\(2)0\(1)\(3)\(3)asc\\desc\(2)desc\(2)0
+    in  link lnk_named  <-> jn_Employee
+    out link lnk_ranked  <-> cpy_Ranked
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_named.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_named.employee_sk
+        col total_transactions sql=4 prec=10,0 nullable=0  := lnk_named.total_transactions
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_named.employee_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_named.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_named.role
+
+STAGE cpy_Ranked  [PxCopy]
+    in  link lnk_ranked  <-> srt_Store_Rank
+    out link lnk_all  <-> tgt_employee_transactions
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_ranked.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_ranked.employee_sk
+        col total_transactions sql=4 prec=10,0 nullable=0  := lnk_ranked.total_transactions
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_ranked.employee_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_ranked.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_ranked.role
+    out link lnk_top_in  <-> hd_Top10
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_ranked.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_ranked.employee_sk
+        col total_transactions sql=4 prec=10,0 nullable=0  := lnk_ranked.total_transactions
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_ranked.employee_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_ranked.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_ranked.role
+
+STAGE tgt_employee_transactions  [PxSequentialFile]
+    in  link lnk_all  <-> cpy_Ranked
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Q1_Employee_Transactions.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE hd_Top10  [PxHead]
+    property nrecs = 10
+    property selection = part
+    property part = \(2)\(2)0\(1)\(3)part\(2)0\(2)0
+    in  link lnk_top_in  <-> cpy_Ranked
+    out link lnk_top10  <-> tgt_top10_employees
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_top_in.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_top_in.employee_sk
+        col total_transactions sql=4 prec=10,0 nullable=0  := lnk_top_in.total_transactions
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_top_in.employee_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_top_in.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_top_in.role
+
+STAGE tgt_top10_employees  [PxSequentialFile]
+    in  link lnk_top10  <-> hd_Top10
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Q1_Top10_Employees.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

@@ -18,3 +18,4 @@ migration/switch_prompt/python_builtin.yml
 migration/analysis/*.tmp
 migration/analysis/*.source_file_names.txt
 migration/analysis/*_SQL_TEMP/
+migration/switch_input_sdp_unit/

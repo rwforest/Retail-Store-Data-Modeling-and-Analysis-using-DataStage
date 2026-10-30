@@ -1,0 +1,269 @@
+DATASTAGE PARALLEL JOB: J11_Fact_Returns
+Description: Fact_Returns from cancellation invoices (prefix C)
+Folder: \\Retail_DW\\Pipeline\\3_Facts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_stg_orders  [PxSequentialFile]
+    out link lnk_orders  <-> flt_Cancels
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pStgDir#/stg_orders.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col description sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col employee_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col line_amount sql=3 prec=18,2 nullable=0
+        col is_cancel sql=4 prec=10,0 nullable=0
+        col is_nonproduct sql=4 prec=10,0 nullable=0
+        col is_guest sql=4 prec=10,0 nullable=0
+
+STAGE flt_Cancels  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)is_cancel = 1 and is_nonproduct = 0\(2)0
+    in  link lnk_orders  <-> src_stg_orders
+    out link lnk_cancels  <-> xfm_Return_Measures
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_orders.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_orders.stock_code
+        col description sql=12 prec=255,0 nullable=0  := lnk_orders.description
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_orders.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_orders.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_orders.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_orders.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_orders.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_orders.store_id
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_orders.employee_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_orders.invoice_date_key
+        col line_amount sql=3 prec=18,2 nullable=0  := lnk_orders.line_amount
+        col is_cancel sql=4 prec=10,0 nullable=0  := lnk_orders.is_cancel
+        col is_nonproduct sql=4 prec=10,0 nullable=0  := lnk_orders.is_nonproduct
+        col is_guest sql=4 prec=10,0 nullable=0  := lnk_orders.is_guest
+
+STAGE xfm_Return_Measures  [CTransformerStage]
+    in  link lnk_cancels  <-> flt_Cancels
+    out link lnk_ret  <-> jn_Product
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_cancels.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_cancels.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_cancels.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_cancels.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_cancels.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := TimestampToString(lnk_cancels.invoice_ts, "%yyyy%mm")
+        col returned_qty sql=4 prec=10,0 nullable=0  := Abs(lnk_cancels.quantity)
+        col returned_amount sql=3 prec=18,2 nullable=0  := Abs(lnk_cancels.line_amount)
+
+STAGE src_dim_product  [PxSequentialFile]
+    out link lnk_dim_product  <-> jn_Product
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_product.csv\(2)0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col product_name sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col list_price sql=3 prec=18,2 nullable=0
+        col supplier_id sql=12 prec=255,0 nullable=0
+        col status sql=12 prec=255,0 nullable=0
+        col unit_cost sql=3 prec=18,2 nullable=0
+        col price_band sql=12 prec=255,0 nullable=0
+        col supplier_name sql=12 prec=255,0 nullable=0
+        col supplier_country sql=12 prec=255,0 nullable=0
+        col lead_time_days sql=4 prec=10,0 nullable=0
+        col reliability_score sql=3 prec=18,2 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col category_group sql=12 prec=255,0 nullable=0
+
+STAGE jn_Product  [PxJoin]
+    property operator = leftouterjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)stock_code\(2)0
+    in  link lnk_ret  <-> xfm_Return_Measures
+    in  link lnk_dim_product  <-> src_dim_product
+    out link lnk_p  <-> xfm_Product_Defaults
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_ret.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_ret.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_ret.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_ret.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_ret.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_ret.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_ret.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_ret.returned_amount
+        col category sql=12 prec=255,0 nullable=1  := lnk_dim_product.category
+        col product_sk sql=4 prec=10,0 nullable=1  := lnk_dim_product.product_sk
+
+STAGE xfm_Product_Defaults  [CTransformerStage]
+    in  link lnk_p  <-> jn_Product
+    out link lnk_p_nn  <-> jn_Customer
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_p.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_p.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_p.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_p.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_p.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_p.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_p.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_p.returned_amount
+        col category sql=12 prec=255,0 nullable=0  := NullToValue(lnk_p.category, "Unknown")
+        col product_sk sql=4 prec=10,0 nullable=0  := NullToValue(lnk_p.product_sk, -1)
+
+STAGE src_dim_customer  [PxSequentialFile]
+    out link lnk_dim_customer  <-> flt_Current_Customer
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_customer.csv\(2)0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col email sql=12 prec=255,0 nullable=0
+        col city sql=12 prec=255,0 nullable=0
+        col attr_hash sql=-5 prec=19,0 nullable=0
+        col version_no sql=4 prec=10,0 nullable=0
+        col eff_start_key sql=4 prec=10,0 nullable=0
+        col eff_end_key sql=4 prec=10,0 nullable=0
+        col is_current sql=4 prec=10,0 nullable=0
+
+STAGE flt_Current_Customer  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)is_current = 1\(2)0
+    in  link lnk_dim_customer  <-> src_dim_customer
+    out link lnk_cur  <-> jn_Customer
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_dim_customer.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dim_customer.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_dim_customer.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_dim_customer.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_dim_customer.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_dim_customer.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_dim_customer.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim_customer.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_dim_customer.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_dim_customer.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_dim_customer.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_dim_customer.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_dim_customer.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_dim_customer.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_dim_customer.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_dim_customer.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_dim_customer.is_current
+
+STAGE jn_Customer  [PxJoin]
+    property operator = leftouterjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    in  link lnk_p_nn  <-> xfm_Product_Defaults
+    in  link lnk_cur  <-> flt_Current_Customer
+    out link lnk_c  <-> xfm_Customer_Defaults
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_p_nn.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_p_nn.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_p_nn.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_p_nn.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_p_nn.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_p_nn.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_p_nn.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_p_nn.returned_amount
+        col category sql=12 prec=255,0 nullable=0  := lnk_p_nn.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_p_nn.product_sk
+        col customer_sk sql=4 prec=10,0 nullable=1  := lnk_cur.customer_sk
+
+STAGE xfm_Customer_Defaults  [CTransformerStage]
+    in  link lnk_c  <-> jn_Customer
+    out link lnk_c_nn  <-> srt_Fact_Returns
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_c.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_c.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_c.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_c.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_c.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_c.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_c.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_c.returned_amount
+        col category sql=12 prec=255,0 nullable=0  := lnk_c.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_c.product_sk
+        col customer_sk sql=4 prec=10,0 nullable=0  := NullToValue(lnk_c.customer_sk, -1)
+
+STAGE srt_Fact_Returns  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)invoice_no\(2)0\(1)\(3)key\(2)stock_code\(2)0
+    in  link lnk_c_nn  <-> xfm_Customer_Defaults
+    out link lnk_sorted  <-> cpy_Returns
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_c_nn.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_c_nn.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_c_nn.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_c_nn.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_c_nn.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_c_nn.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_c_nn.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_c_nn.returned_amount
+        col category sql=12 prec=255,0 nullable=0  := lnk_c_nn.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_c_nn.product_sk
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_c_nn.customer_sk
+
+STAGE cpy_Returns  [PxCopy]
+    in  link lnk_sorted  <-> srt_Fact_Returns
+    out link lnk_out  <-> tgt_fact_returns
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_sorted.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_sorted.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_sorted.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_sorted.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_sorted.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_sorted.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_sorted.returned_amount
+        col category sql=12 prec=255,0 nullable=0  := lnk_sorted.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.product_sk
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_sk
+    out link lnk_audit_in  <-> agg_Returns_By_Category
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_sorted.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_sorted.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_sorted.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_sorted.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_sorted.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_sorted.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_sorted.returned_amount
+        col category sql=12 prec=255,0 nullable=0  := lnk_sorted.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.product_sk
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_sk
+
+STAGE tgt_fact_returns  [PxSequentialFile]
+    in  link lnk_out  <-> cpy_Returns
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/fact_returns.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE agg_Returns_By_Category  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)category\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)returned_amount\(2)0\(1)\(3)\(3)sum\(2)returned_amount\(2)0
+    in  link lnk_audit_in  <-> cpy_Returns
+    out link lnk_by_cat  <-> tgt_audit_returns_by_category
+        col category sql=12 prec=255,0 nullable=0  := lnk_audit_in.category
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_audit_in.returned_amount
+
+STAGE tgt_audit_returns_by_category  [PxSequentialFile]
+    in  link lnk_by_cat  <-> agg_Returns_By_Category
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pAuditDir#/audit_returns_by_category.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

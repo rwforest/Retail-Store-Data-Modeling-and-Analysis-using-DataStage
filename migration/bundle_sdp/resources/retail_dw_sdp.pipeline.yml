@@ -1,0 +1,15 @@
+resources:
+  pipelines:
+    retail_dw_sdp:
+      name: retail_dw_sdp (${bundle.target})
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      continuous: false
+      libraries:
+        - glob:
+            include: ../src/pipeline/**
+      configuration:
+        src_dir: ${var.src_dir}
+        pRunDate: "2011-12-31"
+        pEffDate: "2011-07-01"

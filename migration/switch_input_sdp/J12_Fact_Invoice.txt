@@ -1,0 +1,106 @@
+DATASTAGE PARALLEL JOB: J12_Fact_Invoice
+Description: Invoice-grain fact (basket level) rolled up from Fact_Sales
+Folder: \\Retail_DW\\Pipeline\\3_Facts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_fact_sales  [PxSequentialFile]
+    out link lnk_fact  <-> agg_Invoice
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_sales.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+
+STAGE agg_Invoice  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)invoice_no\(2)0\(1)\(3)key\(2)customer_id\(2)0\(1)\(3)key\(2)customer_sk\(2)0\(1)\(3)key\(2)store_sk\(2)0\(1)\(3)key\(2)employee_sk\(2)0\(1)\(3)key\(2)invoice_date_key\(2)0\(1)\(3)key\(2)year_month\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)sales_amount\(2)0\(1)\(3)\(3)sum\(2)invoice_sales\(2)0\(1)\(3)reduce\(2)gross_profit\(2)0\(1)\(3)\(3)sum\(2)invoice_profit\(2)0\(1)\(3)reduce\(2)quantity\(2)0\(1)\(3)\(3)sum\(2)item_qty\(2)0\(1)\(3)reduce\(2)line_cnt\(2)0\(1)\(3)\(3)sum\(2)line_total\(2)0
+    in  link lnk_fact  <-> src_fact_sales
+    out link lnk_inv  <-> xfm_Basket_Metrics
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_fact.invoice_no
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_fact.customer_id
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_fact.customer_sk
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_fact.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_fact.employee_sk
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fact.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_fact.year_month
+        col invoice_sales sql=3 prec=18,2 nullable=0
+        col invoice_profit sql=3 prec=18,2 nullable=0
+        col item_qty sql=-5 prec=19,0 nullable=0
+        col line_total sql=-5 prec=19,0 nullable=0
+
+STAGE xfm_Basket_Metrics  [CTransformerStage]
+    in  link lnk_inv  <-> agg_Invoice
+    out link lnk_basket  <-> srt_Fact_Invoice
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_inv.invoice_no
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_inv.customer_id
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_inv.customer_sk
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_inv.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_inv.employee_sk
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_inv.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_inv.year_month
+        col invoice_sales sql=3 prec=18,2 nullable=0  := lnk_inv.invoice_sales
+        col invoice_profit sql=3 prec=18,2 nullable=0  := lnk_inv.invoice_profit
+        col item_qty sql=-5 prec=19,0 nullable=0  := lnk_inv.item_qty
+        col line_total sql=-5 prec=19,0 nullable=0  := lnk_inv.line_total
+        col avg_line_value sql=3 prec=18,2 nullable=0  := If lnk_inv.line_total > 0 Then lnk_inv.invoice_sales / lnk_inv.line_total Else 0
+        col invoice_cnt sql=4 prec=10,0 nullable=0  := 1
+
+STAGE srt_Fact_Invoice  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)invoice_no\(2)0
+    in  link lnk_basket  <-> xfm_Basket_Metrics
+    out link lnk_sorted  <-> tgt_fact_invoice
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_basket.invoice_no
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_basket.customer_id
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_basket.customer_sk
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_basket.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_basket.employee_sk
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_basket.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_basket.year_month
+        col invoice_sales sql=3 prec=18,2 nullable=0  := lnk_basket.invoice_sales
+        col invoice_profit sql=3 prec=18,2 nullable=0  := lnk_basket.invoice_profit
+        col item_qty sql=-5 prec=19,0 nullable=0  := lnk_basket.item_qty
+        col line_total sql=-5 prec=19,0 nullable=0  := lnk_basket.line_total
+        col avg_line_value sql=3 prec=18,2 nullable=0  := lnk_basket.avg_line_value
+        col invoice_cnt sql=4 prec=10,0 nullable=0  := lnk_basket.invoice_cnt
+
+STAGE tgt_fact_invoice  [PxSequentialFile]
+    in  link lnk_sorted  <-> srt_Fact_Invoice
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/fact_invoice.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

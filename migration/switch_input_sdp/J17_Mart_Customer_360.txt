@@ -1,0 +1,340 @@
+DATASTAGE PARALLEL JOB: J17_Mart_Customer_360
+Description: Customer 360 with RFM scoring, returns and segment
+Folder: \\Retail_DW\\Pipeline\\4_Marts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_fact_invoice  [PxSequentialFile]
+    out link lnk_inv  <-> flt_Known_Customers
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_invoice.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col invoice_sales sql=3 prec=18,2 nullable=0
+        col invoice_profit sql=3 prec=18,2 nullable=0
+        col item_qty sql=-5 prec=19,0 nullable=0
+        col line_total sql=-5 prec=19,0 nullable=0
+        col avg_line_value sql=3 prec=18,2 nullable=0
+        col invoice_cnt sql=4 prec=10,0 nullable=0
+
+STAGE flt_Known_Customers  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)customer_id > 0\(2)0
+    in  link lnk_inv  <-> src_fact_invoice
+    out link lnk_known  <-> agg_Cust_Revenue
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_inv.invoice_no
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_inv.customer_id
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_inv.customer_sk
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_inv.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_inv.employee_sk
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_inv.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_inv.year_month
+        col invoice_sales sql=3 prec=18,2 nullable=0  := lnk_inv.invoice_sales
+        col invoice_profit sql=3 prec=18,2 nullable=0  := lnk_inv.invoice_profit
+        col item_qty sql=-5 prec=19,0 nullable=0  := lnk_inv.item_qty
+        col line_total sql=-5 prec=19,0 nullable=0  := lnk_inv.line_total
+        col avg_line_value sql=3 prec=18,2 nullable=0  := lnk_inv.avg_line_value
+        col invoice_cnt sql=4 prec=10,0 nullable=0  := lnk_inv.invoice_cnt
+
+STAGE agg_Cust_Revenue  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)invoice_sales\(2)0\(1)\(3)\(3)sum\(2)total_sales\(2)0\(1)\(3)reduce\(2)invoice_profit\(2)0\(1)\(3)\(3)sum\(2)total_profit\(2)0\(1)\(3)reduce\(2)invoice_cnt\(2)0\(1)\(3)\(3)sum\(2)invoice_total\(2)0\(1)\(3)reduce\(2)invoice_date_key\(2)0\(1)\(3)\(3)min\(2)first_date_key\(2)0\(1)\(3)\(3)max\(2)last_date_key\(2)0
+    in  link lnk_known  <-> flt_Known_Customers
+    out link lnk_rev  <-> jn_Revenue_Returns
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_known.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0
+        col total_profit sql=3 prec=18,2 nullable=0
+        col invoice_total sql=-5 prec=19,0 nullable=0
+        col first_date_key sql=4 prec=10,0 nullable=0
+        col last_date_key sql=4 prec=10,0 nullable=0
+
+STAGE src_fact_returns  [PxSequentialFile]
+    out link lnk_ret  <-> flt_Known_Returns
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_returns.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col returned_qty sql=4 prec=10,0 nullable=0
+        col returned_amount sql=3 prec=18,2 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+
+STAGE flt_Known_Returns  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)customer_id > 0\(2)0
+    in  link lnk_ret  <-> src_fact_returns
+    out link lnk_ret_known  <-> agg_Cust_Returns
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_ret.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_ret.stock_code
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_ret.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_ret.country
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_ret.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_ret.year_month
+        col returned_qty sql=4 prec=10,0 nullable=0  := lnk_ret.returned_qty
+        col returned_amount sql=3 prec=18,2 nullable=0  := lnk_ret.returned_amount
+        col category sql=12 prec=255,0 nullable=0  := lnk_ret.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_ret.product_sk
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_ret.customer_sk
+
+STAGE agg_Cust_Returns  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    property selection = reduce
+    property reduce = \(2)\(2)0\(1)\(3)reduce\(2)returned_amount\(2)0\(1)\(3)\(3)sum\(2)total_returned\(2)0
+    in  link lnk_ret_known  <-> flt_Known_Returns
+    out link lnk_ret_agg  <-> jn_Revenue_Returns
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_ret_known.customer_id
+        col total_returned sql=3 prec=18,2 nullable=0
+
+STAGE jn_Revenue_Returns  [PxJoin]
+    property operator = leftouterjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    in  link lnk_rev  <-> agg_Cust_Revenue
+    in  link lnk_ret_agg  <-> agg_Cust_Returns
+    out link lnk_rr  <-> xfm_Returns_Defaults
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_rev.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_rev.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_rev.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_rev.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_rev.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_rev.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=1  := lnk_ret_agg.total_returned
+
+STAGE xfm_Returns_Defaults  [CTransformerStage]
+    in  link lnk_rr  <-> jn_Revenue_Returns
+    out link lnk_rr_nn  <-> jn_Customer_Attrs
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_rr.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_rr.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_rr.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_rr.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_rr.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_rr.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=0  := NullToValue(lnk_rr.total_returned, 0)
+
+STAGE src_dim_customer  [PxSequentialFile]
+    out link lnk_dim_customer  <-> flt_Current_Customer
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/dim_customer.csv\(2)0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col cust_name sql=12 prec=255,0 nullable=0
+        col gender sql=12 prec=255,0 nullable=0
+        col age sql=4 prec=10,0 nullable=0
+        col spending_score sql=4 prec=10,0 nullable=0
+        col annual_income_k sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col email sql=12 prec=255,0 nullable=0
+        col city sql=12 prec=255,0 nullable=0
+        col attr_hash sql=-5 prec=19,0 nullable=0
+        col version_no sql=4 prec=10,0 nullable=0
+        col eff_start_key sql=4 prec=10,0 nullable=0
+        col eff_end_key sql=4 prec=10,0 nullable=0
+        col is_current sql=4 prec=10,0 nullable=0
+
+STAGE flt_Current_Customer  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)is_current = 1\(2)0
+    in  link lnk_dim_customer  <-> src_dim_customer
+    out link lnk_cur  <-> jn_Customer_Attrs
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_dim_customer.customer_sk
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_dim_customer.customer_id
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_dim_customer.cust_name
+        col gender sql=12 prec=255,0 nullable=0  := lnk_dim_customer.gender
+        col age sql=4 prec=10,0 nullable=0  := lnk_dim_customer.age
+        col spending_score sql=4 prec=10,0 nullable=0  := lnk_dim_customer.spending_score
+        col annual_income_k sql=4 prec=10,0 nullable=0  := lnk_dim_customer.annual_income_k
+        col country sql=12 prec=255,0 nullable=0  := lnk_dim_customer.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_dim_customer.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_dim_customer.loyalty_tier
+        col email sql=12 prec=255,0 nullable=0  := lnk_dim_customer.email
+        col city sql=12 prec=255,0 nullable=0  := lnk_dim_customer.city
+        col attr_hash sql=-5 prec=19,0 nullable=0  := lnk_dim_customer.attr_hash
+        col version_no sql=4 prec=10,0 nullable=0  := lnk_dim_customer.version_no
+        col eff_start_key sql=4 prec=10,0 nullable=0  := lnk_dim_customer.eff_start_key
+        col eff_end_key sql=4 prec=10,0 nullable=0  := lnk_dim_customer.eff_end_key
+        col is_current sql=4 prec=10,0 nullable=0  := lnk_dim_customer.is_current
+
+STAGE jn_Customer_Attrs  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)customer_id\(2)0
+    in  link lnk_rr_nn  <-> xfm_Returns_Defaults
+    in  link lnk_cur  <-> flt_Current_Customer
+    out link lnk_attrs  <-> xfm_RFM
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_rr_nn.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_rr_nn.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_rr_nn.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_rr_nn.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_rr_nn.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_rr_nn.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=0  := lnk_rr_nn.total_returned
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_cur.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_cur.cust_name
+        col age sql=4 prec=10,0 nullable=0  := lnk_cur.age
+        col country sql=12 prec=255,0 nullable=0  := lnk_cur.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_cur.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_cur.loyalty_tier
+
+STAGE xfm_RFM  [CTransformerStage]
+    in  link lnk_attrs  <-> jn_Customer_Attrs
+    out link lnk_rfm  <-> xfm_Segment
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_attrs.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_attrs.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_attrs.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_attrs.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_attrs.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_attrs.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=0  := lnk_attrs.total_returned
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_attrs.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_attrs.cust_name
+        col age sql=4 prec=10,0 nullable=0  := lnk_attrs.age
+        col country sql=12 prec=255,0 nullable=0  := lnk_attrs.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_attrs.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_attrs.loyalty_tier
+        col recency_days sql=4 prec=10,0 nullable=0  := DaysSinceFromDate(StringToDate(pRunDate, "%yyyy-%mm-%dd"), StringToDate(lnk_attrs.last_date_key, "%yyyy%mm%dd"))
+        col r_score sql=4 prec=10,0 nullable=0  := If DaysSinceFromDate(StringToDate(pRunDate, "%yyyy-%mm-%dd"), StringToDate(lnk_attrs.last_date_key, "%yyyy%mm%dd")) <= 30 Then 5 Else If DaysSinceFromDate(StringToDate(pRunDate, "%yyyy-%mm-%dd"), StringToDate(lnk_attrs.last_date_key, "%yyyy%mm%dd")) <= 90 Then 4 Else If DaysSinceFromDate(StringToDate(pRunDate, "%yyyy-%mm-%dd"), StringToDate(lnk_attrs.last_date_key, "%yyyy%mm%dd")) <= 180 Then 3 Else If DaysSinceFromDate(StringToDate(pRunDate, "%yyyy-%mm-%dd"), StringToDate(lnk_attrs.last_date_key, "%yyyy%mm%dd")) <= 270 Then 2 Else 1
+        col f_score sql=4 prec=10,0 nullable=0  := If lnk_attrs.invoice_total >= 10 Then 5 Else If lnk_attrs.invoice_total >= 6 Then 4 Else If lnk_attrs.invoice_total >= 3 Then 3 Else If lnk_attrs.invoice_total >= 2 Then 2 Else 1
+        col m_score sql=4 prec=10,0 nullable=0  := If lnk_attrs.total_sales >= 5000 Then 5 Else If lnk_attrs.total_sales >= 2000 Then 4 Else If lnk_attrs.total_sales >= 800 Then 3 Else If lnk_attrs.total_sales >= 300 Then 2 Else 1
+        col net_sales sql=3 prec=18,2 nullable=0  := lnk_attrs.total_sales - lnk_attrs.total_returned
+
+STAGE xfm_Segment  [CTransformerStage]
+    in  link lnk_rfm  <-> xfm_RFM
+    out link lnk_seg  <-> srt_Customer_360
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_rfm.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_rfm.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_rfm.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_rfm.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_rfm.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_rfm.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=0  := lnk_rfm.total_returned
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_rfm.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_rfm.cust_name
+        col age sql=4 prec=10,0 nullable=0  := lnk_rfm.age
+        col country sql=12 prec=255,0 nullable=0  := lnk_rfm.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_rfm.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_rfm.loyalty_tier
+        col recency_days sql=4 prec=10,0 nullable=0  := lnk_rfm.recency_days
+        col r_score sql=4 prec=10,0 nullable=0  := lnk_rfm.r_score
+        col f_score sql=4 prec=10,0 nullable=0  := lnk_rfm.f_score
+        col m_score sql=4 prec=10,0 nullable=0  := lnk_rfm.m_score
+        col net_sales sql=3 prec=18,2 nullable=0  := lnk_rfm.net_sales
+        col segment sql=12 prec=255,0 nullable=0  := If lnk_rfm.r_score >= 4 And lnk_rfm.f_score >= 4 Then "CHAMPION" Else If lnk_rfm.r_score >= 3 And lnk_rfm.f_score >= 3 Then "LOYAL" Else If lnk_rfm.r_score >= 4 Then "RECENT" Else If lnk_rfm.r_score <= 2 And lnk_rfm.f_score >= 3 Then "AT_RISK" Else "HIBERNATING"
+
+STAGE srt_Customer_360  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)net_sales\(2)0\(1)\(3)\(3)asc\\desc\(2)desc\(2)0
+    in  link lnk_seg  <-> xfm_Segment
+    out link lnk_sorted  <-> cpy_360
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_seg.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_seg.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_seg.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_seg.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_seg.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_seg.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=0  := lnk_seg.total_returned
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_seg.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_seg.cust_name
+        col age sql=4 prec=10,0 nullable=0  := lnk_seg.age
+        col country sql=12 prec=255,0 nullable=0  := lnk_seg.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_seg.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_seg.loyalty_tier
+        col recency_days sql=4 prec=10,0 nullable=0  := lnk_seg.recency_days
+        col r_score sql=4 prec=10,0 nullable=0  := lnk_seg.r_score
+        col f_score sql=4 prec=10,0 nullable=0  := lnk_seg.f_score
+        col m_score sql=4 prec=10,0 nullable=0  := lnk_seg.m_score
+        col net_sales sql=3 prec=18,2 nullable=0  := lnk_seg.net_sales
+        col segment sql=12 prec=255,0 nullable=0  := lnk_seg.segment
+
+STAGE cpy_360  [PxCopy]
+    in  link lnk_sorted  <-> srt_Customer_360
+    out link lnk_out  <-> tgt_mart_customer_360
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_sorted.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_sorted.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_sorted.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_sorted.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_sorted.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=0  := lnk_sorted.total_returned
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_sorted.cust_name
+        col age sql=4 prec=10,0 nullable=0  := lnk_sorted.age
+        col country sql=12 prec=255,0 nullable=0  := lnk_sorted.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_sorted.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_sorted.loyalty_tier
+        col recency_days sql=4 prec=10,0 nullable=0  := lnk_sorted.recency_days
+        col r_score sql=4 prec=10,0 nullable=0  := lnk_sorted.r_score
+        col f_score sql=4 prec=10,0 nullable=0  := lnk_sorted.f_score
+        col m_score sql=4 prec=10,0 nullable=0  := lnk_sorted.m_score
+        col net_sales sql=3 prec=18,2 nullable=0  := lnk_sorted.net_sales
+        col segment sql=12 prec=255,0 nullable=0  := lnk_sorted.segment
+    out link lnk_seg_in  <-> agg_Segments
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_id
+        col total_sales sql=3 prec=18,2 nullable=0  := lnk_sorted.total_sales
+        col total_profit sql=3 prec=18,2 nullable=0  := lnk_sorted.total_profit
+        col invoice_total sql=-5 prec=19,0 nullable=0  := lnk_sorted.invoice_total
+        col first_date_key sql=4 prec=10,0 nullable=0  := lnk_sorted.first_date_key
+        col last_date_key sql=4 prec=10,0 nullable=0  := lnk_sorted.last_date_key
+        col total_returned sql=3 prec=18,2 nullable=0  := lnk_sorted.total_returned
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_sorted.customer_sk
+        col cust_name sql=12 prec=255,0 nullable=0  := lnk_sorted.cust_name
+        col age sql=4 prec=10,0 nullable=0  := lnk_sorted.age
+        col country sql=12 prec=255,0 nullable=0  := lnk_sorted.country
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_sorted.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_sorted.loyalty_tier
+        col recency_days sql=4 prec=10,0 nullable=0  := lnk_sorted.recency_days
+        col r_score sql=4 prec=10,0 nullable=0  := lnk_sorted.r_score
+        col f_score sql=4 prec=10,0 nullable=0  := lnk_sorted.f_score
+        col m_score sql=4 prec=10,0 nullable=0  := lnk_sorted.m_score
+        col net_sales sql=3 prec=18,2 nullable=0  := lnk_sorted.net_sales
+        col segment sql=12 prec=255,0 nullable=0  := lnk_sorted.segment
+
+STAGE tgt_mart_customer_360  [PxSequentialFile]
+    in  link lnk_out  <-> cpy_360
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Customer_360.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE agg_Segments  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)segment\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)customers\(2)0
+    in  link lnk_seg_in  <-> cpy_360
+    out link lnk_seg_counts  <-> tgt_segment_summary
+        col segment sql=12 prec=255,0 nullable=0  := lnk_seg_in.segment
+        col customers sql=4 prec=10,0 nullable=0
+
+STAGE tgt_segment_summary  [PxSequentialFile]
+    in  link lnk_seg_counts  <-> agg_Segments
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Customer_Segments.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

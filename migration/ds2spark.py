@@ -392,13 +392,76 @@ spark.sql(f"USE {{catalog}}.{{schema}}")
         return head + "".join("\n# COMMAND ----------\n" + c + "\n" for c in self.cells)
 
 
+class SdpCompiler(Compiler):
+    """Same translation, emitted as a Spark Declarative Pipeline source file (pyspark.pipelines).
+
+    Dataset names are pipeline-wide, so every link becomes a temporary view prefixed with the job code
+    (j04_lnk_stores); every target file becomes a materialized view named after the file stem. Used to produce
+    few-shot examples for the Switch SDP prompt (SCD2 jobs J05/J06 are converted differently, see README).
+    """
+
+    def __init__(self, job):
+        super().__init__(job)
+        self.prefix = job.name.split("_")[0].lower()
+        self.links = sorted((lk.name for lk in job.links), key=len, reverse=True)
+
+    def ref(self, text):
+        for lk in self.links:
+            text = re.sub(rf"\b{lk}\b", f"{self.prefix}_{lk}", text)
+        return text
+
+    def view(self, link, body, comment):
+        name = f"{self.prefix}_{link}"
+        self.cells.append(f'# {comment}\n@dp.temporary_view(name="{name}")\ndef {name}():\n'
+                          f'    return spark.sql(f"""\n{self.ref(body)}\n""")')
+
+    def st_seq_src(self, s):
+        lk = s.outputs[0]
+        path, name = s.seq["file"], f"{self.prefix}_{lk.name}"
+        if is_src_file(path):
+            raw = Path(path).name
+            sel = ",\n        ".join(repr(self.read_col(c)) for c in lk.cols)
+            names = ", ".join(repr(c.name) for c in lk.cols)
+            self.cells.append(
+                f"# {s.name}: source file {raw} (columns mapped by position, as DataStage does)\n"
+                f'@dp.temporary_view(name="{name}")\ndef {name}():\n'
+                f'    raw = spark.read.option("header", "true").option("escape", \'"\').csv(f"{{src_dir}}/{raw}")\n'
+                f'    assert len(raw.columns) == {len(lk.cols)}, f"{raw}: expected {len(lk.cols)} columns, got {{len(raw.columns)}}"\n'
+                f'    return raw.toDF({names}).selectExpr(\n        {sel})')
+        else:
+            self.cells.append(f'# {s.name}: dataset {tbl(path)}\n@dp.temporary_view(name="{name}")\ndef {name}():\n'
+                              f'    return spark.read.table("{tbl(path)}")')
+        self.order[lk.name] = None
+
+    def st_seq_tgt(self, s):
+        inp, t = s.inputs[0], tbl(s.seq["file"])
+        self.cells.append(f'# {s.name}: target file -> materialized view {t}\n@dp.materialized_view(name="{t}")\n'
+                          f'def {t}():\n    return spark.read.table("{self.prefix}_{inp.name}").select('
+                          f'{", ".join(repr(c.name) for c in inp.cols)})')
+
+    def render(self):
+        j = self.job
+        head = f'''# Databricks notebook source
+# {j.name} - {j.short}
+# Layer: {j.layer}. SDP source file compiled from the DataStage job by migration/ds2spark.py --sdp.
+from pyspark import pipelines as dp
+
+src_dir = spark.conf.get("src_dir")
+pRunDate = spark.conf.get("pRunDate", "2011-12-31")
+pEffDate = spark.conf.get("pEffDate", "2011-07-01")
+'''
+        return head + "".join("\n# COMMAND ----------\n" + c + "\n" for c in self.cells)
+
+
 def main():
-    OUT.mkdir(parents=True, exist_ok=True)
+    sdp = "--sdp" in sys.argv
+    out = ROOT / "migration" / "sdp_reference" if sdp else OUT
+    out.mkdir(parents=True, exist_ok=True)
     jobs = P.build_all()
     for j in jobs:
-        (OUT / f"{j.name}.py").write_text(Compiler(j).compile())
+        (out / f"{j.name}.py").write_text((SdpCompiler if sdp else Compiler)(j).compile())
         print("wrote", j.name)
-    print(len(jobs), "notebooks")
+    print(len(jobs), "SDP source files" if sdp else "notebooks", "->", out)
 
 
 if __name__ == "__main__":

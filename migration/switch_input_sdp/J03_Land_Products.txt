@@ -1,0 +1,174 @@
+DATASTAGE PARALLEL JOB: J03_Land_Products
+Description: Land product catalogue + suppliers, derive cost and price band
+Folder: \\Retail_DW\\Pipeline\\1_Land
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_products  [PxSequentialFile]
+    out link lnk_products  <-> xfm_Std_Product
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/products_catalog.csv\(2)0
+        col StockCode sql=12 prec=255,0 nullable=0
+        col Description sql=12 prec=255,0 nullable=0
+        col Category sql=12 prec=255,0 nullable=0
+        col ListPrice sql=3 prec=18,2 nullable=0
+        col SupplierID sql=12 prec=255,0 nullable=0
+        col Status sql=12 prec=255,0 nullable=0
+
+STAGE src_suppliers  [PxSequentialFile]
+    out link lnk_suppliers  <-> xfm_Std_Supplier
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/suppliers.csv\(2)0
+        col SupplierID sql=12 prec=255,0 nullable=0
+        col SupplierName sql=12 prec=255,0 nullable=0
+        col SupplierCountry sql=12 prec=255,0 nullable=0
+        col LeadTimeDays sql=4 prec=10,0 nullable=0
+        col ReliabilityScore sql=3 prec=18,2 nullable=0
+
+STAGE xfm_Std_Product  [CTransformerStage]
+    in  link lnk_products  <-> src_products
+    out link lnk_std_prod  <-> jn_Product_Supplier
+        col stock_code sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_products.StockCode))
+        col product_name sql=12 prec=255,0 nullable=0  := If Len(Trim(lnk_products.Description)) = 0 Then "UNKNOWN" Else Upcase(Trim(lnk_products.Description))
+        col category sql=12 prec=255,0 nullable=0  := Trim(lnk_products.Category)
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_products.ListPrice
+        col supplier_id sql=12 prec=255,0 nullable=0  := Trim(lnk_products.SupplierID)
+        col status sql=12 prec=255,0 nullable=0  := Trim(lnk_products.Status)
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_products.ListPrice * 0.55
+        col price_band sql=12 prec=255,0 nullable=0  := If lnk_products.ListPrice < 1 Then "LOW" Else If lnk_products.ListPrice < 5 Then "MID" Else "HIGH"
+
+STAGE xfm_Std_Supplier  [CTransformerStage]
+    in  link lnk_suppliers  <-> src_suppliers
+    out link lnk_std_sup  <-> jn_Product_Supplier
+        col supplier_id sql=12 prec=255,0 nullable=0  := Trim(lnk_suppliers.SupplierID)
+        col supplier_name sql=12 prec=255,0 nullable=0  := Trim(lnk_suppliers.SupplierName)
+        col supplier_country sql=12 prec=255,0 nullable=0  := Trim(lnk_suppliers.SupplierCountry)
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_suppliers.LeadTimeDays
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_suppliers.ReliabilityScore
+
+STAGE jn_Product_Supplier  [PxJoin]
+    property operator = leftouterjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)supplier_id\(2)0
+    in  link lnk_std_prod  <-> xfm_Std_Product
+    in  link lnk_std_sup  <-> xfm_Std_Supplier
+    out link lnk_prod_sup  <-> xfm_Supplier_Defaults
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_std_prod.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_std_prod.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_std_prod.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_std_prod.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_std_prod.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_std_prod.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_std_prod.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_std_prod.price_band
+        col supplier_name sql=12 prec=255,0 nullable=1  := lnk_std_sup.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=1  := lnk_std_sup.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=1  := lnk_std_sup.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=1  := lnk_std_sup.reliability_score
+
+STAGE xfm_Supplier_Defaults  [CTransformerStage]
+    in  link lnk_prod_sup  <-> jn_Product_Supplier
+    out link lnk_prod_sup_nn  <-> rmd_Products
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_prod_sup.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_prod_sup.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_prod_sup.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_prod_sup.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_prod_sup.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_prod_sup.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_prod_sup.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_prod_sup.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := NullToValue(lnk_prod_sup.supplier_name, "UNKNOWN")
+        col supplier_country sql=12 prec=255,0 nullable=0  := NullToValue(lnk_prod_sup.supplier_country, "UNKNOWN")
+        col lead_time_days sql=4 prec=10,0 nullable=0  := NullToValue(lnk_prod_sup.lead_time_days, 0)
+        col reliability_score sql=3 prec=18,2 nullable=0  := NullToValue(lnk_prod_sup.reliability_score, 0)
+
+STAGE rmd_Products  [PxRemDup]
+    property keep = first
+    property key = \(2)\(2)0\(1)\(3)key\(2)stock_code\(2)0
+    in  link lnk_prod_sup_nn  <-> xfm_Supplier_Defaults
+    out link lnk_dedup  <-> cpy_Products
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_prod_sup_nn.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_prod_sup_nn.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_prod_sup_nn.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_prod_sup_nn.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_prod_sup_nn.reliability_score
+
+STAGE cpy_Products  [PxCopy]
+    in  link lnk_dedup  <-> rmd_Products
+    out link lnk_all  <-> tgt_stg_products
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_dedup.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_dedup.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_dedup.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_dedup.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_dedup.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_dedup.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_dedup.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_dedup.reliability_score
+    out link lnk_for_active  <-> flt_Active_Products
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_dedup.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_dedup.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_dedup.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_dedup.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_dedup.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_dedup.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_dedup.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_dedup.reliability_score
+
+STAGE tgt_stg_products  [PxSequentialFile]
+    in  link lnk_all  <-> cpy_Products
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pStgDir#/stg_products.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE flt_Active_Products  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)status = "ACTIVE"\(2)0
+    in  link lnk_for_active  <-> cpy_Products
+    out link lnk_active  <-> tgt_stg_active_products
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_for_active.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_for_active.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_for_active.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_for_active.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_for_active.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_for_active.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_for_active.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_for_active.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_for_active.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_for_active.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_for_active.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_for_active.reliability_score
+
+STAGE tgt_stg_active_products  [PxSequentialFile]
+    in  link lnk_active  <-> flt_Active_Products
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pStgDir#/stg_active_products.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

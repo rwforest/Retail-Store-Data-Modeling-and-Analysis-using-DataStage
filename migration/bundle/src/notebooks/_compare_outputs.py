@@ -99,8 +99,10 @@ def save(t):
     dq.save_checks(rules, config=TableChecksStorageConfig(location=CHECKS_TABLE, run_config_name=t, mode="overwrite"))
 
 
+# the first save creates the checks table if needed, so the parallel saves never race on CREATE TABLE
+save(common[0])
 with ThreadPoolExecutor(PARALLELISM) as pool:
-    list(pool.map(save, common))
+    list(pool.map(save, common[1:]))
 print("rule sets saved to", CHECKS_TABLE)
 
 # drop quarantine tables left by earlier runs; this run recreates only the ones that differ

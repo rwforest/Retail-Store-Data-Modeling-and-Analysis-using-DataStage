@@ -1,0 +1,165 @@
+DATASTAGE PARALLEL JOB: J19_Mart_Basket_Affinity
+Description: Market-basket: product pairs bought on the same invoice
+Folder: \\Retail_DW\\Pipeline\\4_Marts
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_fact_sales  [PxSequentialFile]
+    out link lnk_fact  <-> flt_Positive_Lines
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pDwhDir#/fact_sales.csv\(2)0
+        col invoice_no sql=12 prec=255,0 nullable=0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col quantity sql=4 prec=10,0 nullable=0
+        col invoice_ts sql=11 prec=26,0 nullable=0
+        col unit_price sql=3 prec=18,2 nullable=0
+        col customer_id sql=4 prec=10,0 nullable=0
+        col country sql=12 prec=255,0 nullable=0
+        col store_id sql=12 prec=255,0 nullable=0
+        col invoice_date_key sql=4 prec=10,0 nullable=0
+        col year_month sql=12 prec=255,0 nullable=0
+        col customer_sk sql=4 prec=10,0 nullable=0
+        col customer_type sql=12 prec=255,0 nullable=0
+        col loyalty_tier sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col product_sk sql=4 prec=10,0 nullable=0
+        col region sql=12 prec=255,0 nullable=0
+        col store_sk sql=4 prec=10,0 nullable=0
+        col employee_sk sql=4 prec=10,0 nullable=0
+        col currency sql=12 prec=255,0 nullable=0
+        col sales_amount sql=3 prec=18,2 nullable=0
+        col cost_amount sql=3 prec=18,2 nullable=0
+        col gross_profit sql=3 prec=18,2 nullable=0
+        col local_amount sql=3 prec=18,2 nullable=0
+        col line_cnt sql=4 prec=10,0 nullable=0
+
+STAGE flt_Positive_Lines  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)quantity > 0\(2)0
+    in  link lnk_fact  <-> src_fact_sales
+    out link lnk_pos  <-> xfm_Pair_Prep
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_fact.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_fact.stock_code
+        col quantity sql=4 prec=10,0 nullable=0  := lnk_fact.quantity
+        col invoice_ts sql=11 prec=26,0 nullable=0  := lnk_fact.invoice_ts
+        col unit_price sql=3 prec=18,2 nullable=0  := lnk_fact.unit_price
+        col customer_id sql=4 prec=10,0 nullable=0  := lnk_fact.customer_id
+        col country sql=12 prec=255,0 nullable=0  := lnk_fact.country
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_fact.store_id
+        col invoice_date_key sql=4 prec=10,0 nullable=0  := lnk_fact.invoice_date_key
+        col year_month sql=12 prec=255,0 nullable=0  := lnk_fact.year_month
+        col customer_sk sql=4 prec=10,0 nullable=0  := lnk_fact.customer_sk
+        col customer_type sql=12 prec=255,0 nullable=0  := lnk_fact.customer_type
+        col loyalty_tier sql=12 prec=255,0 nullable=0  := lnk_fact.loyalty_tier
+        col category sql=12 prec=255,0 nullable=0  := lnk_fact.category
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_fact.product_sk
+        col region sql=12 prec=255,0 nullable=0  := lnk_fact.region
+        col store_sk sql=4 prec=10,0 nullable=0  := lnk_fact.store_sk
+        col employee_sk sql=4 prec=10,0 nullable=0  := lnk_fact.employee_sk
+        col currency sql=12 prec=255,0 nullable=0  := lnk_fact.currency
+        col sales_amount sql=3 prec=18,2 nullable=0  := lnk_fact.sales_amount
+        col cost_amount sql=3 prec=18,2 nullable=0  := lnk_fact.cost_amount
+        col gross_profit sql=3 prec=18,2 nullable=0  := lnk_fact.gross_profit
+        col local_amount sql=3 prec=18,2 nullable=0  := lnk_fact.local_amount
+        col line_cnt sql=4 prec=10,0 nullable=0  := lnk_fact.line_cnt
+
+STAGE xfm_Pair_Prep  [CTransformerStage]
+    in  link lnk_pos  <-> flt_Positive_Lines
+    out link lnk_prep  <-> rmd_Invoice_Product
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_pos.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_pos.stock_code
+
+STAGE rmd_Invoice_Product  [PxRemDup]
+    property keep = first
+    property key = \(2)\(2)0\(1)\(3)key\(2)invoice_no\(2)0\(1)\(3)key\(2)stock_code\(2)0
+    in  link lnk_prep  <-> xfm_Pair_Prep
+    out link lnk_dedup  <-> cpy_Basket
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_prep.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_prep.stock_code
+
+STAGE cpy_Basket  [PxCopy]
+    in  link lnk_dedup  <-> rmd_Invoice_Product
+    out link lnk_a  <-> jn_Self
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_dedup.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+    out link lnk_b_in  <-> xfm_Rename_B
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_dedup.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+
+STAGE xfm_Rename_B  [CTransformerStage]
+    in  link lnk_b_in  <-> cpy_Basket
+    out link lnk_b  <-> jn_Self
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_b_in.invoice_no
+        col stock_code_b sql=12 prec=255,0 nullable=0  := lnk_b_in.stock_code
+
+STAGE jn_Self  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)invoice_no\(2)0
+    in  link lnk_a  <-> cpy_Basket
+    in  link lnk_b  <-> xfm_Rename_B
+    out link lnk_pairs_all  <-> flt_Ordered_Pairs
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_a.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_a.stock_code
+        col stock_code_b sql=12 prec=255,0 nullable=0  := lnk_b.stock_code_b
+
+STAGE flt_Ordered_Pairs  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)stock_code < stock_code_b\(2)0
+    in  link lnk_pairs_all  <-> jn_Self
+    out link lnk_pairs  <-> agg_Pair_Counts
+        col invoice_no sql=12 prec=255,0 nullable=0  := lnk_pairs_all.invoice_no
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_pairs_all.stock_code
+        col stock_code_b sql=12 prec=255,0 nullable=0  := lnk_pairs_all.stock_code_b
+
+STAGE agg_Pair_Counts  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)stock_code\(2)0\(1)\(3)key\(2)stock_code_b\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)pair_count\(2)0
+    in  link lnk_pairs  <-> flt_Ordered_Pairs
+    out link lnk_counts  <-> flt_Min_Support
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_pairs.stock_code
+        col stock_code_b sql=12 prec=255,0 nullable=0  := lnk_pairs.stock_code_b
+        col pair_count sql=4 prec=10,0 nullable=0
+
+STAGE flt_Min_Support  [PxFilter]
+    property where = \(2)\(2)0\(1)\(3)where\(2)pair_count >= 5\(2)0
+    in  link lnk_counts  <-> agg_Pair_Counts
+    out link lnk_support  <-> srt_Pairs
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_counts.stock_code
+        col stock_code_b sql=12 prec=255,0 nullable=0  := lnk_counts.stock_code_b
+        col pair_count sql=4 prec=10,0 nullable=0  := lnk_counts.pair_count
+
+STAGE srt_Pairs  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)pair_count\(2)0\(1)\(3)\(3)asc\\desc\(2)desc\(2)0
+    in  link lnk_support  <-> flt_Min_Support
+    out link lnk_sorted  <-> hd_Top1000
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_support.stock_code
+        col stock_code_b sql=12 prec=255,0 nullable=0  := lnk_support.stock_code_b
+        col pair_count sql=4 prec=10,0 nullable=0  := lnk_support.pair_count
+
+STAGE hd_Top1000  [PxHead]
+    property nrecs = 1000
+    property selection = part
+    property part = \(2)\(2)0\(1)\(3)part\(2)0\(2)0
+    in  link lnk_sorted  <-> srt_Pairs
+    out link lnk_top  <-> tgt_mart_basket_affinity
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_sorted.stock_code
+        col stock_code_b sql=12 prec=255,0 nullable=0  := lnk_sorted.stock_code_b
+        col pair_count sql=4 prec=10,0 nullable=0  := lnk_sorted.pair_count
+
+STAGE tgt_mart_basket_affinity  [PxSequentialFile]
+    in  link lnk_top  <-> hd_Top1000
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pMartDir#/Basket_Affinity.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

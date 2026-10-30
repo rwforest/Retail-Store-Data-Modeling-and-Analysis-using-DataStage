@@ -1,0 +1,37 @@
+resources:
+  jobs:
+    retail_dw_sdp_e2e:
+      name: Retail DW SDP end-to-end (${bundle.target})
+      description: Run the Switch-generated SDP pipeline, validate it with DQX, reconcile it against the compiled run
+      parameters:
+        - {name: catalog, default: '${var.catalog}'}
+        - {name: schema, default: '${var.schema}'}
+      environments:
+        - environment_key: dqx
+          spec:
+            environment_version: '5'
+            dependencies: ['databricks-labs-dqx==0.17.0']
+      tasks:
+        - task_key: pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.retail_dw_sdp.id}
+        - task_key: dqx_validate
+          depends_on:
+            - task_key: pipeline
+          environment_key: dqx
+          notebook_task:
+            notebook_path: ../src/notebooks/_dqx_validate.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              schema: '{{job.parameters.schema}}'
+        - task_key: dqx_compare
+          depends_on:
+            - task_key: pipeline
+          environment_key: dqx
+          notebook_task:
+            notebook_path: ../src/notebooks/_compare_outputs.py
+            base_parameters:
+              catalog: '{{job.parameters.catalog}}'
+              left_schema: retail_dw_compiled
+              right_schema: '{{job.parameters.schema}}'
+              out_schema: retail_dw_compare_sdp

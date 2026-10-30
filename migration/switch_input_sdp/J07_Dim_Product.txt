@@ -1,0 +1,162 @@
+DATASTAGE PARALLEL JOB: J07_Dim_Product
+Description: Build Dim_Product with surrogate key and category group
+Folder: \\Retail_DW\\Pipeline\\2_Dimensions
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_stg_products  [PxSequentialFile]
+    out link lnk_stg  <-> rmd_Product
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pStgDir#/stg_products.csv\(2)0
+        col stock_code sql=12 prec=255,0 nullable=0
+        col product_name sql=12 prec=255,0 nullable=0
+        col category sql=12 prec=255,0 nullable=0
+        col list_price sql=3 prec=18,2 nullable=0
+        col supplier_id sql=12 prec=255,0 nullable=0
+        col status sql=12 prec=255,0 nullable=0
+        col unit_cost sql=3 prec=18,2 nullable=0
+        col price_band sql=12 prec=255,0 nullable=0
+        col supplier_name sql=12 prec=255,0 nullable=0
+        col supplier_country sql=12 prec=255,0 nullable=0
+        col lead_time_days sql=4 prec=10,0 nullable=0
+        col reliability_score sql=3 prec=18,2 nullable=0
+
+STAGE rmd_Product  [PxRemDup]
+    property keep = first
+    property key = \(2)\(2)0\(1)\(3)key\(2)stock_code\(2)0
+    in  link lnk_stg  <-> src_stg_products
+    out link lnk_dedup  <-> srt_Product
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_stg.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_stg.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_stg.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_stg.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_stg.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_stg.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_stg.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_stg.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_stg.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_stg.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_stg.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_stg.reliability_score
+
+STAGE srt_Product  [PxSort]
+    property operator = psort -sorter unix
+    property key = \(2)\(2)0\(1)\(3)key\(2)stock_code\(2)0
+    in  link lnk_dedup  <-> rmd_Product
+    out link lnk_sorted  <-> xfm_Product_SK
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dedup.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_dedup.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_dedup.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_dedup.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_dedup.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_dedup.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_dedup.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_dedup.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_dedup.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_dedup.reliability_score
+
+STAGE xfm_Product_SK  [CTransformerStage]
+    in  link lnk_sorted  <-> srt_Product
+    out link lnk_dim  <-> xfm_Product_Cols
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_sorted.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_sorted.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_sorted.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_sorted.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_sorted.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_sorted.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_sorted.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_sorted.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_sorted.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_sorted.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_sorted.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_sorted.reliability_score
+        col product_sk sql=4 prec=10,0 nullable=0  := @PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1
+        col category_group sql=12 prec=255,0 nullable=0  := If lnk_sorted.category = "Seasonal" Then "SEASONAL" Else If lnk_sorted.category = "General Merchandise" Then "OTHER" Else "CORE"
+
+STAGE xfm_Product_Cols  [CTransformerStage]
+    in  link lnk_dim  <-> xfm_Product_SK
+    out link lnk_dim_cols  <-> cpy_Dim_Product
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dim.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_dim.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_dim.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_dim.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_dim.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_dim.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_dim.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_dim.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_dim.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_dim.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_dim.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_dim.reliability_score
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_dim.product_sk
+        col category_group sql=12 prec=255,0 nullable=0  := lnk_dim.category_group
+
+STAGE cpy_Dim_Product  [PxCopy]
+    in  link lnk_dim_cols  <-> xfm_Product_Cols
+    out link lnk_dim_out  <-> tgt_dim_product
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dim_cols.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_dim_cols.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_dim_cols.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_dim_cols.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_dim_cols.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_dim_cols.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_dim_cols.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_dim_cols.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_dim_cols.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_dim_cols.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_dim_cols.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_dim_cols.reliability_score
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_dim_cols.product_sk
+        col category_group sql=12 prec=255,0 nullable=0  := lnk_dim_cols.category_group
+    out link lnk_audit_in  <-> agg_Products_By_Category
+        col stock_code sql=12 prec=255,0 nullable=0  := lnk_dim_cols.stock_code
+        col product_name sql=12 prec=255,0 nullable=0  := lnk_dim_cols.product_name
+        col category sql=12 prec=255,0 nullable=0  := lnk_dim_cols.category
+        col list_price sql=3 prec=18,2 nullable=0  := lnk_dim_cols.list_price
+        col supplier_id sql=12 prec=255,0 nullable=0  := lnk_dim_cols.supplier_id
+        col status sql=12 prec=255,0 nullable=0  := lnk_dim_cols.status
+        col unit_cost sql=3 prec=18,2 nullable=0  := lnk_dim_cols.unit_cost
+        col price_band sql=12 prec=255,0 nullable=0  := lnk_dim_cols.price_band
+        col supplier_name sql=12 prec=255,0 nullable=0  := lnk_dim_cols.supplier_name
+        col supplier_country sql=12 prec=255,0 nullable=0  := lnk_dim_cols.supplier_country
+        col lead_time_days sql=4 prec=10,0 nullable=0  := lnk_dim_cols.lead_time_days
+        col reliability_score sql=3 prec=18,2 nullable=0  := lnk_dim_cols.reliability_score
+        col product_sk sql=4 prec=10,0 nullable=0  := lnk_dim_cols.product_sk
+        col category_group sql=12 prec=255,0 nullable=0  := lnk_dim_cols.category_group
+
+STAGE tgt_dim_product  [PxSequentialFile]
+    in  link lnk_dim_out  <-> cpy_Dim_Product
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pDwhDir#/dim_product.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE agg_Products_By_Category  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)category\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)products\(2)0
+    in  link lnk_audit_in  <-> cpy_Dim_Product
+    out link lnk_cat_counts  <-> tgt_audit_products_by_category
+        col category sql=12 prec=255,0 nullable=0  := lnk_audit_in.category
+        col products sql=4 prec=10,0 nullable=0
+
+STAGE tgt_audit_products_by_category  [PxSequentialFile]
+    in  link lnk_cat_counts  <-> agg_Products_By_Category
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pAuditDir#/audit_products_by_category.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

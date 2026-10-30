@@ -1,0 +1,19 @@
+# Switch configuration file
+# Edit these values to configure Switch behavior
+
+# Required Parameters
+target_type: "sdp"
+source_format: "generic"
+comment_lang: "English"
+log_level: "INFO"
+token_count_threshold: 40000
+concurrency: 4
+max_fix_attempts: 0  # SDP validation fails for every file (no pipeline config in Switch's validation run); the fixer only adds bogus defaults
+
+# Optional Parameters
+conversion_prompt_yaml: "/Workspace/Users/<your-user>/retail_dw_switch_prompts/datastage_to_sdp.yml"  # set before uploading
+output_extension:
+sql_output_dir:
+request_params: '{"max_tokens": 64000, "thinking": {"type": "adaptive"}, "output_config": {"effort": "high"}}'
+# sdp_language is required when target_type is "sdp". Valid values: "python", "sql"
+sdp_language: "python"

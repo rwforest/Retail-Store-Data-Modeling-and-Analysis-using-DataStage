@@ -1,0 +1,117 @@
+DATASTAGE PARALLEL JOB: J04_Land_Stores_Employees
+Description: Land stores + employees, derive region and headcount
+Folder: \\Retail_DW\\Pipeline\\1_Land
+Parameters:
+  - pSrcDir (default 'C:/case_study/Source_Data'): Source files directory
+  - pStgDir (default 'C:/case_study/Staging'): Staging directory
+  - pDwhDir (default 'C:/case_study/Warehouse'): Warehouse (dimensions/facts) directory
+  - pMartDir (default 'C:/case_study/Marts'): Data mart directory
+  - pAuditDir (default 'C:/case_study/Audit'): Audit / DQ output directory
+  - pRunDate (default '2011-12-31'): Business run date (yyyy-mm-dd)
+  - pEffDate (default '2011-07-01'): SCD2 effective date for changed customer attributes (yyyy-mm-dd)
+
+STAGE src_stores  [PxSequentialFile]
+    out link lnk_stores  <-> xfm_Store_Region
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/stores.csv\(2)0
+        col StoreID sql=12 prec=255,0 nullable=0
+        col StoreName sql=12 prec=255,0 nullable=0
+        col Country sql=12 prec=255,0 nullable=0
+        col Channel sql=12 prec=255,0 nullable=0
+        col Rating sql=4 prec=10,0 nullable=0
+        col NoOfEmployees sql=4 prec=10,0 nullable=0
+
+STAGE src_employees  [PxSequentialFile]
+    out link lnk_employees  <-> xfm_Emp_Std
+        property selection = file
+        property rejects = continue
+        property reportProgress = yes
+        property firstLineColumnNames = firstLineColumnNames
+        property file  = \(2)\(2)0\(1)\(3)file \(2)#pSrcDir#/employees.csv\(2)0
+        col EmployeeID sql=12 prec=255,0 nullable=0
+        col StoreID sql=12 prec=255,0 nullable=0
+        col EmployeeName sql=12 prec=255,0 nullable=0
+        col Role sql=12 prec=255,0 nullable=0
+        col HireDate sql=12 prec=255,0 nullable=0
+
+STAGE xfm_Store_Region  [CTransformerStage]
+    in  link lnk_stores  <-> src_stores
+    out link lnk_std_store  <-> jn_Store_EmpCount
+        col store_id sql=12 prec=255,0 nullable=0  := Trim(lnk_stores.StoreID)
+        col store_name sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_stores.StoreName))
+        col country sql=12 prec=255,0 nullable=0  := Trim(lnk_stores.Country)
+        col channel sql=12 prec=255,0 nullable=0  := Trim(lnk_stores.Channel)
+        col rating sql=4 prec=10,0 nullable=0  := lnk_stores.Rating
+        col no_of_employees sql=4 prec=10,0 nullable=0  := lnk_stores.NoOfEmployees
+        col region sql=12 prec=255,0 nullable=0  := If Trim(lnk_stores.Country) = "United Kingdom" Then "UK" Else If Trim(lnk_stores.Country) = "EIRE" Then "UK&I" Else If Trim(lnk_stores.Channel) = "ONLINE" Then "ONLINE" Else "EUROPE_ROW"
+
+STAGE xfm_Emp_Std  [CTransformerStage]
+    in  link lnk_employees  <-> src_employees
+    out link lnk_std_emp  <-> cpy_Emp
+        col employee_id sql=12 prec=255,0 nullable=0  := Trim(lnk_employees.EmployeeID)
+        col store_id sql=12 prec=255,0 nullable=0  := Trim(lnk_employees.StoreID)
+        col employee_name sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_employees.EmployeeName))
+        col role sql=12 prec=255,0 nullable=0  := Upcase(Trim(lnk_employees.Role))
+        col hire_date sql=9 prec=10,0 nullable=0  := StringToDate(lnk_employees.HireDate, "%yyyy-%mm-%dd")
+        col tenure_years sql=4 prec=10,0 nullable=0  := DaysSinceFromDate(StringToDate(pRunDate, "%yyyy-%mm-%dd"), StringToDate(lnk_employees.HireDate, "%yyyy-%mm-%dd")) / 365
+
+STAGE cpy_Emp  [PxCopy]
+    in  link lnk_std_emp  <-> xfm_Emp_Std
+    out link lnk_emp_out  <-> tgt_stg_employees
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_std_emp.employee_id
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_std_emp.store_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_std_emp.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_std_emp.role
+        col hire_date sql=9 prec=10,0 nullable=0  := lnk_std_emp.hire_date
+        col tenure_years sql=4 prec=10,0 nullable=0  := lnk_std_emp.tenure_years
+    out link lnk_emp_cnt  <-> agg_Emp_By_Store
+        col employee_id sql=12 prec=255,0 nullable=0  := lnk_std_emp.employee_id
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_std_emp.store_id
+        col employee_name sql=12 prec=255,0 nullable=0  := lnk_std_emp.employee_name
+        col role sql=12 prec=255,0 nullable=0  := lnk_std_emp.role
+        col hire_date sql=9 prec=10,0 nullable=0  := lnk_std_emp.hire_date
+        col tenure_years sql=4 prec=10,0 nullable=0  := lnk_std_emp.tenure_years
+
+STAGE agg_Emp_By_Store  [PxAggregator]
+    property method = sort
+    property key = \(2)\(2)0\(1)\(3)key\(2)store_id\(2)0
+    property selection = count
+    property countField = \(2)\(2)0\(1)\(3)countField\(2)emp_cnt\(2)0
+    in  link lnk_emp_cnt  <-> cpy_Emp
+    out link lnk_emp_by_store  <-> jn_Store_EmpCount
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_emp_cnt.store_id
+        col emp_cnt sql=4 prec=10,0 nullable=0
+
+STAGE jn_Store_EmpCount  [PxJoin]
+    property operator = innerjoin
+    property key = \(2)\(2)0\(1)\(3)key\(2)store_id\(2)0
+    in  link lnk_std_store  <-> xfm_Store_Region
+    in  link lnk_emp_by_store  <-> agg_Emp_By_Store
+    out link lnk_store_final  <-> tgt_stg_stores
+        col store_id sql=12 prec=255,0 nullable=0  := lnk_std_store.store_id
+        col store_name sql=12 prec=255,0 nullable=0  := lnk_std_store.store_name
+        col country sql=12 prec=255,0 nullable=0  := lnk_std_store.country
+        col channel sql=12 prec=255,0 nullable=0  := lnk_std_store.channel
+        col rating sql=4 prec=10,0 nullable=0  := lnk_std_store.rating
+        col no_of_employees sql=4 prec=10,0 nullable=0  := lnk_std_store.no_of_employees
+        col region sql=12 prec=255,0 nullable=0  := lnk_std_store.region
+        col emp_cnt sql=4 prec=10,0 nullable=0  := lnk_emp_by_store.emp_cnt
+
+STAGE tgt_stg_stores  [PxSequentialFile]
+    in  link lnk_store_final  <-> jn_Store_EmpCount
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pStgDir#/stg_stores.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0
+
+STAGE tgt_stg_employees  [PxSequentialFile]
+    in  link lnk_emp_out  <-> cpy_Emp
+        property file = \(2)\(2)0\(1)\(3)file\(2)#pStgDir#/stg_employees.csv\(2)0
+        property append\\overwrite = overwrite
+        property rejects = continue
+        property firstLineColumnNames = firstLineColumnNames
+        property writemethod = \(2)\(2)0\(1)\(3)writemethod\(2) \(2)0

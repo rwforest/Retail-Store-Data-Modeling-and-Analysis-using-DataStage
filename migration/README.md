@@ -59,6 +59,7 @@ journey, including the dead ends) and **what is still open**.
 |---|---|
 | **compiler**, **compiled version** | `ds2spark.py`, written for this migration because BladeBridge produced nothing. It is not a Lakebridge tool. It reads the job definitions in `pipeline/pipeline_def.py` (the model that also generates the DSX) and emits one Databricks notebook per job by fixed rules (§2.1, §2.3). Same input, same output, every time. |
 | **Switch version** | The notebooks Switch generated from the DSX exports, using our custom prompt. |
+| **SDP version** | A third implementation: Switch with `target_type: sdp` generated one [Spark Declarative Pipeline](https://docs.databricks.com/aws/en/dlt/) source file per job, all deployed as **one** pipeline. SCD2 is done with Auto CDC from snapshots (§7). |
 | **two implementations** | The compiled and Switch versions were both deployed and run, each to its own schema, so each could be checked against the other with DQX. The rule-based and LLM routes are both kept: the compiled version is the deterministic reference, and the Switch version shows what Lakebridge's supported tool produces. |
 | **validation** | DQX rules on the migrated tables of *one* run (not-null, uniqueness, value ranges, foreign keys …), §5. |
 | **reconciliation** | DQX check that the Switch run's tables equal the compiled run's tables, row for row, §6. |
@@ -72,10 +73,10 @@ journey, including the dead ends) and **what is still open**.
 | Source | 23 parallel jobs + 1 master sequence (`Seq_Retail_DW_Master`), 266 stages + 36 sequence activities (see `PIPELINE.md`) |
 | Target | Databricks Asset Bundle: one Lakeflow Job (28 tasks), 23 job notebooks + 5 support notebooks, Delta tables in Unity Catalog |
 | Workspace / catalog | Azure Databricks workspace (CLI profile `DEFAULT`), catalog `unitygo` |
-| Implementations | Two, run side by side (see §0):<br>• **compiled** – our rule-based compiler `ds2spark.py` → `unitygo.retail_dw_compiled`<br>• **Switch** – Lakebridge Switch (LLM) with our custom prompt → `unitygo.retail_dw_switch` |
+| Implementations | Three, run side by side (see §0):<br>• **compiled** – our rule-based compiler `ds2spark.py` → `unitygo.retail_dw_compiled`<br>• **Switch** – Lakebridge Switch (LLM) with our custom prompt → `unitygo.retail_dw_switch`<br>• **SDP** – Switch with `target_type: sdp` → one Spark Declarative Pipeline → `unitygo.retail_dw_sdp` (§7) |
 | Pipeline runs | Both: 27/27 tasks succeed (J05 is correctly *excluded* when `dim_customer` already exists) |
 | DQX validation | 19 tables, 66 rules (60 error / 6 warn): **0 error-level violations** in both; identical warnings |
-| DQX reconciliation | Switch vs compiled, 39 tables / 109,687 rows: **39/39 match**, 0 schema, row or surrogate-key differences |
+| DQX reconciliation | Switch vs compiled, 39 tables / 109,687 rows: **39/39 match**, 0 schema, row or surrogate-key differences<br>SDP vs compiled: **37/39 match**; the 2 differences are explained and are not SDP defects (§7) |
 
 Final runs (job run ids):
 
@@ -84,7 +85,8 @@ Final runs (job run ids):
 | Compiled pipeline | `636922528054694` | SUCCESS, validation clean |
 | Switch pipeline | `698138070632909` | SUCCESS, validation clean |
 | DQX reconciliation | `272420992913954` | 39/39 match (326 s) |
-| DQX reconciliation (with the "optimisation" changes) | `157986346301460` | 39/39 match (566 s – **slower**, see §7) |
+| DQX reconciliation (with the "optimisation" changes) | `157986346301460` | 39/39 match (566 s – **slower**, see §8) |
+| SDP end-to-end (pipeline → DQX validate → DQX compare) | `1120547313076486` | SUCCESS, validation clean, 37/39 match |
 
 ---
 
@@ -150,7 +152,7 @@ flowchart LR
 | `seq_Dim_Customer_Ready` (ANY) | J06 `run_if: NONE_FAILED`, depends on J05 and the check |
 | `act_Promote_Dim_Customer` (`mv` file) | `promote_dim_customer`: `CREATE OR REPLACE TABLE dim_customer AS SELECT * FROM dim_customer_next` |
 | `seq_All_Done` | `dqx_validate` (depends on J14–J23) |
-| `exc_Any_Failure`, `act_Notify_*`, `term_Abort` | **Not migrated.** No job notifications are configured yet (§7) |
+| `exc_Any_Failure`, `act_Notify_*`, `term_Abort` | **Not migrated.** No job notifications are configured yet (§8) |
 
 ### 2.3 Expression translation (`ds2spark.py`)
 
@@ -319,6 +321,10 @@ had reproduced. DQX caught them. See §4.
 
 Covered in §5 and §6.
 
+### Phase 5: SDP version
+
+Switch's `target_type: sdp`, with SCD2 rebuilt on Auto CDC. Covered in §7.
+
 ---
 
 ## 4. DataStage semantics that had to be reproduced
@@ -343,7 +349,7 @@ both implementations. The Switch prompt now spells out each one.
 - **Run:** `DQEngine.validate_checks` first, then `apply_checks_by_metadata`. Results go to
   `<schema>.dq_validation_results` and failing rows to `<schema>.dq_quarantine_<table>`. The task fails the job
   on any error-level violation.
-- **Final result (both schemas):** 0 errors. Warnings, which are expected data conditions:
+- **Final result (all three schemas: compiled, Switch, SDP):** 0 errors. Warnings, which are expected data conditions:
 
   | Table | Rule | Rows |
   |---|---|---|
@@ -382,7 +388,7 @@ The Switch output is the dataset under check; the compiled output is the referen
 Caveat: the Switch prompt uses compiled notebooks as few-shot examples, so the two implementations are
 not fully independent. Agreement shows that Switch reproduced the compiler's semantics. It does not prove
 the semantics independently. Validation against DataStage itself would need DataStage output for
-the same inputs (see §7).
+the same inputs (see §8).
 
 ### Static comparison of notebooks (`compare_notebooks.py`)
 
@@ -395,9 +401,116 @@ Before running, each Switch generation was compared view by view against the com
 | CSV reads mapped by position | 0/11 | 11/11 | 11/11 |
 | Non-nullable source strings wrapped in `coalesce` | – | – | 50 (compiled: 50) |
 
+## 7. SDP version (Switch `target_type: sdp`)
+
+The notebook versions keep DataStage's shape: one job notebook per parallel job, and a Lakeflow Job that
+replays the master sequence. The SDP version keeps the *logic* but uses what
+[Spark Declarative Pipelines](https://docs.databricks.com/aws/en/dlt/) provide: one pipeline whose
+dependency graph replaces the sequence, and Auto CDC in place of the hand-written SCD2.
+
+### 7.1 Design
+
+| DataStage | SDP version |
+|---|---|
+| 23 job notebooks + 28-task Lakeflow Job | **One** pipeline (`bundle_sdp/resources/retail_dw_sdp.pipeline.yml`) with 21 source files. The run order comes from the dataflow, so `setup`, `check_dim_customer`, `cond_dim_missing` and `promote_dim_customer` are gone |
+| Link | `@dp.temporary_view` named `<job code>_<link>` (e.g. `j04_lnk_stores`). Dataset names are pipeline-wide, and the same link names recur across jobs |
+| Target file | `@dp.materialized_view` with the same name as the file, so DQX validation and reconciliation run unchanged |
+| Job parameters | Pipeline `configuration` (`src_dir`, `pRunDate`, `pEffDate`) read with `spark.conf.get` |
+| J02 + J05 + J06 + check + promote (customer SCD2) | One **dimension unit** (`J02_J05_J06_Dim_Customer_Unit.py`), see below |
+
+**SCD2 with Auto CDC from snapshots.** In DataStage, SCD2 takes a 20-stage job (J06), a conditional
+initial-load job (J05), an "exists?" check and a file-move promote step. The Analyzer rates J06 VERY_HIGH, and
+re-runs apply the 2011 snapshot again (§8). Switch generated this design:
+
+```python
+dp.create_streaming_table(name="dim_customer_history")
+
+def next_snapshot_and_version(latest_version):      # 2010 = version 1, 2011 = version 2
+    if latest_version is None: return (staged_snapshot(2010), 1)
+    if latest_version == 1:    return (staged_snapshot(2011), 2)
+    return None
+
+dp.create_auto_cdc_from_snapshot_flow(target="dim_customer_history", source=next_snapshot_and_version,
+    keys=["customer_id"], stored_as_scd_type=2, track_history_column_list=["attr_hash"])
+```
+
+`staged_snapshot(year)` is J02's standardisation (positional read, `coalesce`, trims, CRC32 `attr_hash`). It is
+a plain function, so the CDC flow never depends on a pipeline dataset, and the `stg_customers_*` materialized
+views use the same function. Tracking history on `attr_hash` reproduces DataStage's change test exactly.
+`dim_customer` / `dim_customer_next` are materialized views over the history table, which recompute
+DataStage's columns from `__START_AT` / `__END_AT`: `version_no = row_number() OVER (PARTITION BY customer_id ORDER BY __START_AT)`,
+`customer_sk = customer_id * 1000 + version_no`, `eff_start_key` 19000101 or `pEffDate`, `eff_end_key` 99991231
+or `pEffDate − 1`, and `is_current`. Auto CDC remembers which snapshot versions it has processed, so a re-run
+doesn't apply 2011 again.
+
+### 7.2 Prompt and runs
+
+Prompt: [`switch_prompt/datastage_to_sdp.yml`](switch_prompt/datastage_to_sdp.yml), built by
+[`build_prompt_sdp.py`](switch_prompt/build_prompt_sdp.py). Config: [`switch_config_sdp.yml`](switch_config_sdp.yml)
+(`target_type: sdp`, `sdp_language: python`). The stage, function and DataStage-semantics rules are the notebook
+prompt's (§3, §4). New in this prompt:
+
+- **The output shape**, as above: modern API only (`@dp.temporary_view`, `@dp.materialized_view`,
+  `spark.read.table`), no `dbutils`, writes, actions or qualified names.
+- **Switch's built-in SDP guidance is left out on purpose.** The prompt does not reference
+  `${common_sdp_instructions_and_guidelines}`. That guidance uses legacy APIs (`@dp.view`, `dp.read`), forbids the
+  `spark.sql` this translation relies on, and asks for hard-coded `catalog.schema.table` names. Switch combines the
+  prompts by OmegaConf substitution, so leaving the placeholder out removes the guidance completely.
+- **An "SCD Type 2 dimension unit" rule**, without an example: don't translate expire/carry/insert/promote stage
+  by stage. Stage the snapshots in a plain function, add a history streaming table and
+  `create_auto_cdc_from_snapshot_flow` with a version callback, and derive the target files from `__START_AT` /
+  `__END_AT` using the jobs' own derivations.
+- **Few-shots:** J04 and J15 rendered by a new `ds2spark.py --sdp` mode (`sdp_reference/`). That mode emits the
+  same translation as SDP. Before Switch ran, it was deployed for J01 + J04 and the pipeline completed with the
+  same row counts as the compiled version, which confirmed the pattern works.
+- **Input:** the 20 single-job files plus one dimension unit (`switch_input_sdp/J02_J05_J06_Dim_Customer_Unit.txt`).
+  The unit is the three condensed jobs plus a short header that states the sequence's orchestration (initial
+  load only if the dimension is missing, apply 2011, promote). That header is written by hand; it summarises
+  `pipeline_dag.json`, because this information exists only in the sequence.
+
+| Run | What | Result |
+|---|---|---|
+| Switch `70464911684866` | 21 files, `max_fix_attempts: 1` | 21/21 converted (185k tokens). **Every** file reported the same SDP validation error (`DataflowGraph.validate.Unresolved`), even J01, which has no dependencies. Switch validates each file in a throwaway pipeline that has none of our `configuration`. Its fix-up step then "repaired" every file by inventing `src_dir` defaults such as `/Volumes/main/default/source_data` |
+| E2E `334701512237490` | Pipeline → DQX validate → DQX compare | Pipeline **succeeded first time**, validation clean. Compare: 25/39. `dim_customer_next` (SCD2 output) matched **exactly**, but `dim_customer` had 94 rows instead of 948, and 12 downstream tables followed |
+| Switch `533534559691383` | Customer unit only, prompt clarified, `max_fix_attempts: 0` | `dim_customer` and `dim_customer_next` both built from the post-snapshot state. No invented defaults |
+| E2E `1120547313076486` | As above | Pipeline + validation SUCCESS, **37/39 match** |
+
+The prompt fix after the first E2E run: *"Downstream jobs read the dimension AFTER the orchestration has
+run, i.e. after every snapshot has been applied and the 'next' file promoted - so the dimension and its 'next'
+file have the SAME content … never just the initial load."* The first wording ("materialized views with the
+names of the dimension's target files") let Switch map the J05 output to `dim_customer` literally.
+
+### 7.3 Result and the two remaining differences
+
+DQX validation of `retail_dw_sdp` gives the same result as the compiled version: 0 errors, and the same five
+warnings with the same counts. Reconciliation against `retail_dw_compiled`: **37/39 tables match**,
+`dim_customer_history` exists only in SDP (by design), and two tables differ:
+
+| Table | Difference | Cause | Verdict |
+|---|---|---|---|
+| `audit_scd2_customer` | Compiled: `U` 935. SDP: `N` 841, `C` 13, `U` 81 | The **compiled reference** comes from repeated runs. Once `dim_customer` exists, J05 is skipped and J06 compares 2011 with an already-2011 dimension, so everything is "unchanged". SDP reports the correct first-load counts and keeps them on re-runs | Reference artefact, not an SDP defect. To compare like with like, the compiled reference needs a clean first run (drop its customer-dimension tables, then re-run) |
+| `basket_affinity` | 128 rows | J19 keeps the top 1,000 pairs sorted **only** by `pair_count`. The 876 pairs above the cutoff (`pair_count` > 14) are identical. 124 of the pairs tied at 14 are kept, and which 124 is undefined, both in DataStage and in either Spark version | Non-determinism inherited from the source. A tie-break key in J19 would make it testable |
+
+### 7.4 What we learned
+
+1. **The SCD2 pattern converts well.** Given a rule but no example, Switch produced a correct
+   Auto-CDC-from-snapshot design whose output equals the hand-written 20-stage job, and it fixes the re-run problem.
+2. **Hand the LLM the orchestration context.** The SCD2 semantics live partly in the sequence (initial-load
+   condition, promote). Sending the jobs as one unit with that context was needed, and the one ambiguous sentence
+   about promote was the one real defect.
+3. **Switch's SDP validation runs without your pipeline configuration.** If files read `spark.conf`, expect it to
+   fail on every file. Set `max_fix_attempts: 0`, or the fix-up step invents defaults. The 20 single-job files
+   in `bundle_sdp/` come from the first run and still contain these defaults. They are harmless because the
+   pipeline configuration takes precedence, but they would hide a missing configuration, so regenerate them with
+   `max_fix_attempts: 0` before production use.
+4. **The real validation is a pipeline run plus DQX.** Here only a full pipeline update, followed by validation
+   and reconciliation, gave a meaningful answer.
+5. **Reconciliation exposed problems in the reference too:** the re-run state of the compiled SCD2, and a
+   non-deterministic top-N in the source job.
+
 ---
 
-## 7. Open items and known limitations
+## 8. Open items and known limitations
 
 - **BladeBridge produces no notebooks** (§3). It needs one genuine DataStage Designer XML export to tell
   whether our XML shape or the tool is at fault. Alternatively, raise a Lakebridge issue with the logs we collected.
@@ -406,9 +519,17 @@ Before running, each Switch generation was compared view by view against the com
   DQX `compare_datasets`) is the remaining proof of equivalence.
 - **Failure notifications not migrated** (`exc_Any_Failure`, `act_Notify_*`). Add `email_notifications` /
   webhooks to the job.
-- **SCD2 re-runs.** As in the DataStage sequence, a re-run skips J05 and applies the 2011 snapshot again to
-  the promoted `dim_customer`. That matches the source behaviour, but production would need a
-  snapshot-per-run input.
+- **SCD2 re-runs (notebook versions).** As in the DataStage sequence, a re-run skips J05 and applies the 2011
+  snapshot again to the promoted `dim_customer`, so `audit_scd2_customer` reports everything as unchanged. The SDP
+  version (§7) doesn't have this problem, because Auto CDC tracks processed snapshot versions.
+- **Clean first run of the compiled reference.** Needed to reconcile `audit_scd2_customer` against SDP (§7.3).
+  It means dropping `dim_customer`, `dim_customer_next` and `audit_scd2_customer` in `retail_dw_compiled` before the
+  master job runs. Not done yet: it needs approval, because it deletes tables.
+- **Non-deterministic top-N in J19** (`basket_affinity`): sorted only by `pair_count`, so ties at the cutoff are
+  arbitrary in every implementation (§7.3). Adding a tie-break (e.g. `stock_code`, `stock_code_b`) is a change to
+  the source logic and should be agreed first.
+- **SDP files with invented defaults.** 20 of the 21 SDP files still contain the `src_dir` defaults added by
+  Switch's fix-up step (§7.4). Regenerate them with `max_fix_attempts: 0`.
 - **Input-order surrogate keys** (`store_sk`, `employee_sk`, `promo_sk`) depend on file read order. Consider
   ordering them by the natural key.
 - **Reconciliation runtime.** The first version took 326 s for 39 small tables. Several changes meant to speed it
@@ -421,7 +542,7 @@ Before running, each Switch generation was compared view by view against the com
 
 ---
 
-## 8. How to run
+## 9. How to run
 
 Prerequisites: Databricks CLI ≥ 1.0, profile `DEFAULT` on the workspace, and `CREATE SCHEMA` on catalog
 `unitygo`. The source CSVs go in `/Volumes/unitygo/retail_dw/landing`.
@@ -448,12 +569,22 @@ databricks labs lakebridge llm-transpile --input-source migration/switch_input_j
 
 # reconcile the two schemas
 cd migration/bundle && databricks bundle run retail_dw_compare -t dev
+
+# SDP version: few-shots, prompt, Switch (upload switch_config_sdp.yml as the Switch config), then run end-to-end
+python3 migration/ds2spark.py --sdp                                        # sdp_reference/ (few-shots)
+python3 migration/switch_prompt/build_prompt_sdp.py                        # datastage_to_sdp.yml
+databricks labs lakebridge llm-transpile --input-source migration/switch_input_sdp \
+  --output-ws-folder /Workspace/Users/<you>/retail_dw_switch_sdp --source-dialect unknown_etl \
+  --catalog-name unitygo --schema-name retail_dw --volume switch_volume \
+  --foundation-model databricks-claude-sonnet-5-5 --accept-terms true
+# export into migration/bundle_sdp/src/pipeline, then:
+cd migration/bundle_sdp && databricks bundle deploy -t dev && databricks bundle run retail_dw_sdp_e2e -t dev
 ```
 
 Two operational notes. With two CLI profiles on the same host, Lakebridge's inner Python needs
 `DATABRICKS_CONFIG_PROFILE=DEFAULT` exported. `switch_input_jobs/` is `switch_input/` without the master sequence.
 
-## 9. Layout
+## 10. Layout
 
 | Path | What |
 |---|---|
@@ -471,3 +602,9 @@ Two operational notes. With two CLI profiles on the same host, Lakebridge's inne
 | `switch_input/` | Condensed jobs sent to Switch |
 | `switch_output*/` | Switch outputs per attempt (#1 SDP, #2 `_nb`, #3 `_nb_v2`, #4 `_nb_v3`), kept as evidence |
 | `compare_*.json` | Static comparison results per Switch generation |
+| `sdp_reference/` | `ds2spark.py --sdp` output: SDP rendering of each job, used as few-shots (not deployed) |
+| `switch_prompt/build_prompt_sdp.py`, `datastage_to_sdp.yml` | Switch SDP prompt |
+| `switch_config_sdp.yml` | Switch config for `target_type: sdp` |
+| `switch_input_sdp/` | SDP input: 20 condensed jobs + the customer dimension unit |
+| `switch_output_sdp/`, `switch_output_sdp_v2/` | Switch SDP outputs (all 21 files, then the re-converted customer unit) |
+| `bundle_sdp/` | SDP implementation: one pipeline + an end-to-end job (pipeline → DQX validate → DQX compare) |
