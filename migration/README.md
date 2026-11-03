@@ -600,6 +600,77 @@ notebooks (`COLUMN COUNT: 0`, sort key `UNKNOWN`, empty file paths) because the 
 collection types), and `migration/xml/` has been regenerated with it. **Not done yet:** re-running `run_dbxconv.py` on
 `migration/xml` with the fixed XML, and comparing the notebooks with the compiled version.
 
+### 8a.6 The edits made to the provided exports
+
+Only copies were edited (the originals in the repo root are unchanged). `job-32.xml` needed no edit.
+
+1. **`JobType` added to the ROOT record**, in all five `jb_*` files:
+   ```xml
+   <Record Identifier="ROOT" Type="JobDefn" Readonly="1">
+      <Property Name="JobType">0</Property>        <!-- added -->
+      <Property Name="Name">jb_Financial_GL_Reconciliation</Property>
+   ```
+   `0` (server) was chosen because the jobs are built from `ORAOCI9` stages and a `CTransformerStage`, the same
+   make-up as the genuine `job-32.xml`, which declares `JobType` 0. Use `3` if a job is really a parallel job.
+   Genuine exports always carry `JobType`, so a file without it was probably not produced by a DataStage export.
+2. **Malformed tag fixed** in `jb_Sales_Order_Enrichment.xml` line 223:
+   `<Property Name="StageType">ORAOCI9</Collection>` → `…ORAOCI9</Property>`.
+3. **Converter config, not the XML:** `LINK|TABLE=TABLE_NAME` added to a copy of `ds2dws.cfg` (§8a.4).
+
+```python
+s = s.replace('<Property Name="StageType">ORAOCI9</Collection>',
+              '<Property Name="StageType">ORAOCI9</Property>')
+if 'Name="JobType"' not in s:
+    s = re.sub(r'(<Record Identifier="ROOT" Type="JobDefn"[^>]*>\s*\n)',
+               r'\1         <Property Name="JobType">0</Property>\n', s, count=1)
+```
+
+The `C`-prefix and backslash fixes in §8a.3 were for **our** generated XML (`dsx_to_xml.py`). The provided exports
+already used the correct names.
+
+### 8a.7 How the fixes were found
+
+There is no specification to check against. IBM publishes no XSD or DTD for the `DSExport` format, and the
+converter is a closed binary. Every fix was found empirically, with the same loop:
+
+1. **Get a known-good reference.** `job-32.xml` converted first time, which made it the yardstick for what the
+   converter accepts. Until a genuine export was available, the failure couldn't be diagnosed (§3).
+2. **Run with the verbose log** (`-v`) and find the **first line where the good file and the failing file
+   diverge**. The log follows the pipeline step by step: parse → recognise the job (`Found DS job`) → classify the
+   type (`JOBTYPE: n, …`) → conform links → generate (`Generating job 1 of 1`) → write (`Outputting script … into …`).
+3. **Compare the two files at that point** to form a hypothesis.
+4. **Make the smallest change that tests it, and re-run.** Keep it only if the log moves past the failing step.
+
+| Fix | Good file's log | Failing file's log | Comparison of the files | Minimal test |
+|---|---|---|---|---|
+| `JobType` | `JOBTYPE: 0, SERVER` / `Found DS job … type: 0, SERVER` | `Found DS job … type: ,` / `Cannot find any jobs to normalize!` | `job-32.xml` has `JobType` on ROOT; the `jb_*` files have none | Added only `JobType` → all 5 converted |
+| Malformed tag | – | `RUN ERROR: mismatched tag at line 445` | `xmllint` / `minidom` pinpointed line 223 | Fixed the tag → parsed and converted |
+| `C` prefix | `Found DS job …` | no `Found DS job` line at all | `Type="JobDefn"` vs ours `Type="CJobDefn"` | Stripped only the prefix → job recognised (`type: 3, PARALLEL`) |
+| Backslashes | `Outputting script … into out/Jobs/STG/…` | `… into out//Retail_DW//…` / `Cannot open file … No such file or directory` | `Category` `\Jobs\STG` vs ours `\\Retail_DW\\` (DSX escaping kept) | Unescaped `\\` and `\"` → file written |
+| Collection types | `COLUMN COUNT: 107` | `COLUMN COUNT: 0`, sort key `UNKNOWN`, empty paths | `Type="OutputColumn"` vs ours `Type="COutputColumn"` | Dropped the prefix on collections too |
+| Table names | – | `saveAsTable('')` in the output | XML stores the target as `TABLE`; `ds2dws.cfg` maps only `TARGETTABLE` / `TableName` | Added one mapping line → table names filled |
+
+**Hypotheses that were ruled out the same way:** setting our `JobType` to `0` (no effect, the job still wasn't
+recognised); the converter's alternative configs (`ds2dbks_pyspark_main.json`, `ds2dbks_main_no_markdown.json`);
+adding the `StageTypes` / `TableDefinitions` blocks; renaming `CTransformerStage` stage types. The first backslash
+fix was too broad: it also stripped DataStage's `\(2)` property encodings. A genuine DSX showed that DSX escapes
+only `\\` and `\"`, so the fix was narrowed to those.
+
+**Limit:** these requirements are confirmed only for what was tested (six provided exports, the 24 generated
+jobs). A new export can hit a requirement not seen yet. Use the same loop to find it.
+
+### 8a.8 Checking an export before converting it
+
+| Check | How | What it proves |
+|---|---|---|
+| Well-formed XML | `xmllint --noout *.xml` | The file parses (catches tags like the one fixed above) |
+| Valid DataStage export | Re-import into DataStage (Designer *Import → DataStage Components*, `istool import`, `dsimport`) | The only authoritative check, because no public schema exists |
+| Accepted by Lakebridge | Run the Lakebridge Analyzer (§3). A job missing from *Job Details*, or with an empty *Job Type*, won't convert. Or check §8a.3 | The converter will recognise the job |
+
+Not to be confused with IBM's XML *stage* documentation (e.g. [Example 1: Parsing XML](https://www.ibm.com/docs/en/iis/11.7.0?topic=data-example-1-parsing-xml)).
+That is about **business data** in XML that a job reads with the Hierarchical Data stage, validated against the
+data's own XSD (e.g. `Employee.xsd`). It says nothing about the job-definition XML that Lakebridge consumes.
+
 ---
 
 ## 8. Open items and known limitations
