@@ -19,3 +19,11 @@ migration/analysis/*.tmp
 migration/analysis/*.source_file_names.txt
 migration/analysis/*_SQL_TEMP/
 migration/switch_input_sdp_unit/
+migration/xml_external/
+migration/xml_external_converted/
+# BladeBridge offline: extracted third-party wheels, provided XML exports (internal hosts / credentials) and outputs
+/databricks_bb_plugin-*/
+/databricks_bb_analyzer-*/
+/job-*.xml
+/jb_*.xml
+migration/bladebridge_output/

@@ -191,7 +191,7 @@ error instead of being passed through silently.
 
 | Attempt | Result |
 |---|---|
-| **BladeBridge** (Lakebridge's DataStage transpiler, pip `databricks-bb-plugin`, binary run directly) | Parses the XML (finds the job, nodes and links) but generates **no notebooks**. Its only output is `databricks_conversion_supplements.py`. Same result for: all 24 pipeline jobs, the repo's original real export (`RETAIL_DATA_MART_Job.dsx`), six genuine IBM-authored DataStage 8.5 sample jobs ([IBM XML-stage examples](https://www.ibm.com/support/pages/infosphere-datastage-example-files-xml-transformation)), PYSPARK and SPARKSQL targets, the configs named in the converter README, and the grammar-faithful XML. The official `lakebridge transpile` CLI fails with `Client has not yet registered its transpile capability`. **Unresolved**: without one genuine Designer XML export we cannot tell whether the XML shape or the tool is at fault. |
+| **BladeBridge** (Lakebridge's DataStage transpiler, pip `databricks-bb-plugin`, binary run directly) | Parses the XML (finds the job, nodes and links) but generates **no notebooks**. Its only output is `databricks_conversion_supplements.py`. Same result for: all 24 pipeline jobs, the repo's original real export (`RETAIL_DATA_MART_Job.dsx`), six genuine IBM-authored DataStage 8.5 sample jobs ([IBM XML-stage examples](https://www.ibm.com/support/pages/infosphere-datastage-example-files-xml-transformation)), PYSPARK and SPARKSQL targets, the configs named in the converter README, and the grammar-faithful XML. The official `lakebridge transpile` CLI fails with `Client has not yet registered its transpile capability`. **Resolved later (§8a):** our XML was at fault, not the tool. With genuine Designer exports BladeBridge converts offline, and after fixing our DSX → XML converter it converts our pipeline jobs too. |
 | **Compiler** (`ds2spark.py`, see §0) | Reads the in-memory job model (`pipeline/pipeline_def.py`, the same model that generates the DSX). Deterministic. Became the reference implementation. |
 | **Switch #1**, built-in `unknown_etl` prompt | 24/24 "converted" with no errors, but produced [Spark Declarative Pipeline](https://docs.databricks.com/aws/en/dlt/) code: only 1 of 24 files had `@dp` decorators, references to tables that are never created, Windows paths left in, and an invented master-sequence notebook. **Unusable.** |
 | **Switch #2**, custom notebook prompt + few-shots | Usable. Matched the compiled version structurally (same 208 views, reads and writes in all 23 jobs). 170/208 views had identical normalised SQL. **4 real defects:** a `LIMIT` lost its upstream `ORDER BY` (wrong Top-N in J14, J16, J18, J19). |
@@ -510,10 +510,104 @@ warnings with the same counts. Reconciliation against `retail_dw_compiled`: **37
 
 ---
 
+## 8a. BladeBridge offline: converting DataStage XML exports directly
+
+This is the supported Lakebridge route for DataStage (XML export → BladeBridge), run **fully offline**: no
+Databricks CLI, login or workspace. `databricks labs lakebridge transpile` only wraps this converter. It needs a
+workspace login to install, and here it still fails with `Client has not yet registered its transpile capability`.
+
+### 8a.1 Setup
+
+1. Download and unzip the BladeBridge wheel (`databricks_bb_plugin-0.3.0-py3-none-any.whl`) and, optionally, the
+   Analyzer wheel (`databricks_bb_analyzer-0.3.1-py3-none-any.whl`). A wheel is a zip file.
+2. **macOS:** files downloaded from the internet carry a quarantine flag, so macOS refuses to load the native
+   libraries (`library load disallowed by system policy`). Clear it on the extracted folders only:
+   `xattr -dr com.apple.quarantine databricks_bb_plugin-0.3.0-py3-none-any databricks_bb_analyzer-0.3.1-py3-none-any`
+3. Use a Python version for which the wheel ships a pyarmor runtime (`hasher/<platform>/pyarmor_runtime_000000/pyXY/`).
+   macOS arm64 has 3.10–3.14. Here the 3.13 runtime went missing after macOS rejected it on the first,
+   quarantined, load, so 3.12 is used. Install the plugin's declared dependencies:
+   ```bash
+   uv venv -p 3.12 .bbvenv && uv pip install --python .bbvenv/bin/python \
+     "databricks-labs-blueprint>=0.12,<0.13" "psutil>=7" "pygls>=2" "pyyaml>=6.0.2"
+   ```
+
+### 8a.2 Convert
+
+[`run_dbxconv.py`](run_dbxconv.py) calls the `dbxconv` binary once per XML file:
+
+```bash
+.bbvenv/bin/python -I migration/run_dbxconv.py <extracted plugin dir> <dir of .xml> <output dir> PYSPARK
+#                                                                                       PYSPARK | SPARKSQL | DBSQL
+```
+
+| Target | Converter config | Output |
+|---|---|---|
+| `PYSPARK` | `base_datastage2databricks_pyspark.json` | Databricks notebook (Python), DataFrame API, one cell per stage |
+| `SPARKSQL` | `base_datastage2databricks_sparksql.json` | Databricks notebook (Python): one `spark.sql(...)` + temp view per stage |
+| `DBSQL` | `datastage2dbsql.json` + `-M CodeGeneration::SQL` | Plain Databricks SQL script (`.sql`). Not offered by `lakebridge transpile`; documented in `Converter/Configs/Datastage/README.txt` |
+
+Sequence jobs also produce a Databricks Workflow JSON. The raw command for one file, which is what the script does:
+
+```bash
+P=<extracted plugin dir>; C=$P/databricks/labs/bladebridge/Converter
+mkdir -p work/originals work/out && cp job.xml work/originals/ && cd work      # out/ must exist beforehand
+ARGS=("$C/bin/MacOS/dbxconv" DATASTAGE -u base_datastage2databricks_pyspark.json -n out -i originals/job.xml)
+H=$(PYTHONPATH=$P ../.bbvenv/bin/python -c 'import sys; from databricks.labs.bladebridge.hasher import compute_hash; print(compute_hash(sys.argv[1:]))' "${ARGS[@]}")
+BB_CONFIG_CONVERTER_DIR=$C/Configs UTF8_NOT_SUPPORTED=1 "${ARGS[@]}" -H "$H"
+```
+
+- `-H` is a handshake hash over the exact argument list. Only the wheel's hasher can compute it, so recompute it
+  whenever the arguments change (adding `-v` for a verbose log, for example).
+- Each run takes about 12–14 s, most of it the binary unpacking itself.
+- Notebooks are written under `out/` following the job's DataStage `Category` folder path.
+
+### 8a.3 What an XML export must contain
+
+From converter logs on genuine and generated exports:
+
+| Requirement | Symptom when missing | Seen in |
+|---|---|---|
+| A `JobType` property on the `ROOT` record (`0` server, `3` parallel, `2` sequence) | `Found DS job … type: ,` then `Cannot find any jobs to normalize!`, no output | All five `jb_*` sample files. Converted after adding `<Property Name="JobType">0</Property>` |
+| XML type names without DataStage's class prefix: `JobDefn`, `CustomStage`, `OutputColumn`, `CustomProperty`, … not `CJobDefn`, `COutputColumn` | Job never recognised (no `Found DS job`), or, for collections, `COLUMN COUNT: 0` and empty sort keys or paths | Our DSX → XML output (fixed in `dsx_to_xml.py`, record and collection types) |
+| Backslashes **unescaped**: `\Jobs\STG`, not DSX's `\\Jobs\\STG`. DataStage's `\(2)\(3)` property encodings stay as they are | Output path `out//Retail_DW//…`, then `Cannot open file … for writing`, no output | Our DSX → XML output (fixed) |
+| Well-formed XML | `RUN ERROR: mismatched tag` | `jb_Sales_Order_Enrichment.xml` line 223 (`<Property …>ORAOCI9</Collection>`) |
+
+### 8a.4 Results on the provided exports
+
+Six XML exports were provided: `job-32.xml` (a genuine 552 KB server job, `HRATSJobPosting`) and five smaller
+`jb_*` jobs (financial GL reconciliation, healthcare patient CDC, inventory ledger, sales order enrichment, supply
+chain PO). The five were converted from copies with `JobType` added (and the one tag fixed); the originals were
+left untouched. **All 6 convert, to all 3 targets (18/18).** Outputs are in `xml_external_converted/{pyspark,sparksql,dbsql}/`,
+which is git-ignored.
+
+Review against the source. These are drafts that need fixes before they can run:
+
+| Finding | Where | Fix |
+|---|---|---|
+| **Target table names empty.** `saveAsTable('')` / `INSERT INTO <stage name>`, in 11 of 11 Oracle targets | All files | The `ORAOCI9` stage keeps the table in property `TABLE`; `ds2dws.cfg` maps only `TARGETTABLE` / `TableName`. **Adding `LINK\|TABLE=TABLE_NAME` under `[NODE_COLLECTION_CAPTURE]` fixes it** (now `saveAsTable('GL_RECON_MATCHED', …)`). Applied to a copy of the configs, not to the wheel |
+| Oracle outer-join syntax kept: `a.x = b.y(+)` | GL, inventory, sales order, supply chain (1–2 each) | Rewrite as `LEFT JOIN` by hand, or with a Lakebridge SQL transpile of the user SQL |
+| DataStage function left as is in the PySpark target: `Abs(...)` | PySpark GL | Use `abs`. Harmless in SPARKSQL/DBSQL, because SQL function names are case-insensitive |
+| DBSQL script isn't runnable as is: no `;` between statements, intermediate SELECTs not named (the next step reads `Lnk_Raw_Txn`, which is never defined) | All DBSQL outputs | Wrap each step in `CREATE OR REPLACE TEMP VIEW <link> AS …`, or prefer the SPARKSQL notebook, which does exactly that |
+| Source and target connections become `oracledb` imports plus job-parameter widgets (DSNs, users) | All | Replace with Lakehouse Federation / JDBC and Databricks secrets |
+| **Credentials carried over.** `job-32.xml` defines `SOURCE_PASS` / `BASE_PASS` with (encrypted) default values, and BladeBridge writes them into `dbutils.widgets` defaults | `HRATSJobPosting` (all targets) | Never commit these outputs. Move the parameters to secrets |
+
+### 8a.5 Our pipeline through BladeBridge
+
+With the converter fixed (`JobDefn` names, unescaped backslashes), **all 24 pipeline jobs and the master sequence
+convert** (23 notebooks + a Workflow JSON). The first run, before the collection-type fix, produced hollow
+notebooks (`COLUMN COUNT: 0`, sort key `UNKNOWN`, empty file paths) because the collections were still named
+`COutputColumn` / `CCustomProperty`. That fix is now in `dsx_to_xml.py` (`xml_type()` drops the `C` from record and
+collection types), and `migration/xml/` has been regenerated with it. **Not done yet:** re-running `run_dbxconv.py` on
+`migration/xml` with the fixed XML, and comparing the notebooks with the compiled version.
+
+---
+
 ## 8. Open items and known limitations
 
-- **BladeBridge produces no notebooks** (§3). It needs one genuine DataStage Designer XML export to tell
-  whether our XML shape or the tool is at fault. Alternatively, raise a Lakebridge issue with the logs we collected.
+- **BladeBridge** now converts offline (§8a). Still open: re-run our 24 jobs with the collection-type fix,
+  compare them with the compiled version, and contribute the `LINK|TABLE=TABLE_NAME` mapping for `ORAOCI9` upstream
+  (Lakebridge issue / PR). `lakebridge transpile` itself still fails with `Client has not yet registered its
+  transpile capability`.
 - **No comparison against DataStage output.** `Output_Data/` holds outputs of the *original* 4 jobs, not the
   23-job pipeline. Running the DataStage jobs on the same inputs and reconciling (Lakebridge Reconcile or
   DQX `compare_datasets`) is the remaining proof of equivalence.
@@ -592,7 +686,8 @@ Two operational notes. With two CLI profiles on the same host, Lakebridge's inne
 | `dsx_condense.py` | DSX → compact job description, the Switch input |
 | `ds2spark.py` | Deterministic compiler: job model → Databricks notebooks |
 | `build_bundle.py` | Master sequence → Lakeflow Job YAML + support notebooks |
-| `run_bladebridge.py` | Runs BladeBridge locally (kept as the reproduction of the no-output issue) |
+| `run_bladebridge.py` | Runs BladeBridge through its Python wrapper (kept as the reproduction of the no-output issue) |
+| `run_dbxconv.py` | Runs BladeBridge's `dbxconv` directly, offline, for PYSPARK / SPARKSQL / DBSQL (§8a) |
 | `compare_notebooks.py` | Static view-by-view comparison of two notebook sets |
 | `switch_prompt/` | `build_prompt.py` → `datastage_to_notebook.yml` (Switch custom prompt) |
 | `switch_config.yml` | Switch configuration (prompt path, adaptive thinking) |

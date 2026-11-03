@@ -41,7 +41,9 @@ def tokenize(text):
         if m.group("plain") is not None:
             yield "plain", m.group("plain")[7:-7].strip("\r\n")
         elif m.group("str") is not None:
-            yield "str", m.group("str")[1:-1].replace('\\"', '"')
+            # DSX escapes only \\ and \" inside "..."; the XML export does not. Other backslashes are literal
+            # (DataStage's property encoding \(2)\(3) must survive).
+            yield "str", re.sub(r'\\([\\"])', r'\1', m.group("str")[1:-1])
         else:
             yield "word", m.group("word")
 
@@ -98,7 +100,7 @@ def emit_props(node, out, record_type_prop="OLEType"):
             _, name, val, pre = it
             nxt = items[i + 1] if i + 1 < len(items) else None
             if nxt and nxt[0] == "rec" and nxt[1].kind == "DSSUBRECORD" and not pre:
-                out.append(f'<Collection Name="{name}" Type="{attr(val)}">')
+                out.append(f'<Collection Name="{name}" Type="{attr(xml_type(val))}">')
                 while i + 1 < len(items) and items[i + 1][0] == "rec" and items[i + 1][1].kind == "DSSUBRECORD":
                     i += 1
                     out.append("<SubRecord>")
@@ -113,12 +115,20 @@ def emit_props(node, out, record_type_prop="OLEType"):
         i += 1
 
 
+def xml_type(dsx_class):
+    """DSX names record/collection types by class (CJobDefn, CCustomStage, COutputColumn); the XML export drops the
+    leading "C" (JobDefn, CustomStage, OutputColumn). BladeBridge only recognises the XML names."""
+    return dsx_class[1:] if re.fullmatch(r"C[A-Z]\w*", dsx_class) else dsx_class
+
+
 def prop(node, name, default=""):
     return next((it[2] for it in node.items if it[0] == "prop" and it[1] == name), default)
 
 
 def emit_record(rec, out):
-    out.append(f'<Record Identifier="{attr(rec.ident)}" Type="{attr(prop(rec, "OLEType"))}" '
+    # DSX OLEType is the class name (CJobDefn, CCustomStage, ...); the XML export drops the leading "C"
+    rtype = xml_type(prop(rec, "OLEType"))
+    out.append(f'<Record Identifier="{attr(rec.ident)}" Type="{attr(rtype)}" '
                f'Readonly="{attr(prop(rec, "Readonly", "0"))}">')
     emit_props(rec, out)
     out.append("</Record>")
