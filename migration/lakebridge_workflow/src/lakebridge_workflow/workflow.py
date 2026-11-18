@@ -15,7 +15,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Run assessment, hierarchy, planning, and batch transpilation end to end",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--num-jobs", type=int, default=12, help="Target number of new items")
+    p.add_argument("--num-jobs", type=int, help="Target number of new items (required)")
     p.add_argument("--assessment-prefix", type=Path, default=root / "consolidated_all_jobs")
     p.add_argument("--hierarchy-prefix", type=Path, default=root / "job_hierarchy")
     p.add_argument("--state-file", type=Path, default=root / "migration_state.json")
@@ -25,6 +25,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--overwrite", action="store_true", help="Replace an existing batch directory")
     p.add_argument("--plan-only", action="store_true", help="Stop after the dry-run batch plan")
     args = p.parse_args(argv)
+    if args.num_jobs is None:
+        p.error("--num-jobs is required")
     if args.num_jobs <= 0:
         p.error("--num-jobs must be positive")
     return args

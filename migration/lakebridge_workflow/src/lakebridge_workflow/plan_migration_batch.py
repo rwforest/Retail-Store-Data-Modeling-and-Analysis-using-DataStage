@@ -30,16 +30,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Plan a closed-lineage migration batch")
     p.add_argument("--input-json", type=Path, default=Path("job_hierarchy.json"))
     p.add_argument("--state-file", type=Path, default=Path("migration_state.json"))
-    p.add_argument("--num-jobs", type=int, default=12, help="Target number of new items")
+    p.add_argument("--num-jobs", type=int, help="Target number of new items (required for planning)")
     p.add_argument("--filter", help="Optional root name/folder substring filter")
     p.add_argument("--dry-run", action="store_true", help="Print the plan without changing state")
     p.add_argument("--reset-history", action="store_true", help="Start from an empty migration state")
     p.add_argument("--status", action="store_true", help="Print migration history and exit")
     p.add_argument("--plan-json", type=Path, help="Optional JSON output for the selected plan")
     args = p.parse_args(argv)
-    if not args.status and args.num_jobs <= 0:
+    if not args.status and args.num_jobs is None:
+        p.error("--num-jobs is required for planning")
+    if args.num_jobs is not None and args.num_jobs <= 0:
         p.error("--num-jobs must be positive")
-    if args.status and any((args.dry_run, args.reset_history, args.filter, args.num_jobs != 12)):
+    if args.status and any((args.dry_run, args.reset_history, args.filter, args.num_jobs is not None)):
         p.error("--status cannot be combined with planning options")
     return args
 

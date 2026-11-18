@@ -1,15 +1,63 @@
 # Lakebridge workflow package
 
 `lakebridge_workflow/` contains the end-to-end Lakebridge Analyzer, lineage, planning, and
-migration workflow as an installable Python package. It is adapted to the jobs that are
-actually present in this repository and remains ready for a future large DataStage export.
+migration workflow as an installable Python package. It is designed to work with:
 
-The large `EFBI_PRD*.xml`/`.txt` export is **not** checked in. The current source of truth is:
+- condensed DataStage job specifications, such as the files in `../switch_input/*.txt`
+- a genuine large `DSExport` XML/TXT export when one is available
+- a migration checkout containing the repository-specific compiler, bundles, and source exports
 
-- 23 condensed parallel-job specifications in `../switch_input/*.txt`
-- 1 condensed master-sequence specification in `../switch_input/Seq_Retail_DW_Master.txt`
-- authoritative analyzer metrics in `../analysis/lakebridge-analyzer.xlsx`
-- original per-job DSX exports under `../../DataStage Jobs/Pipeline/`
+The package does not assume a fixed job count, hierarchy shape, complexity distribution, or
+batch size.
+
+## End-to-end workflow
+
+The workflow supports two source entry points: condensed job specifications for an existing
+repository checkout and a genuine large DataStage `DSExport` for a new migration assessment.
+Both paths converge on the same analyzer, hierarchy, planning, and transpilation stages.
+
+```mermaid
+flowchart TD
+    A["DataStage source"] --> B{"Source format"}
+    B -->|"Large DSExport XML/TXT"| C["split_datastage_xml.py<br/>streaming profiler and chunker"]
+    B -->|"Condensed job specs"| D["Condensed-job directory<br/>(for example switch_input/)"]
+
+    C --> E["Job-type-filtered XML chunks"]
+    E --> F["analyze.py / analyze_parallel.py<br/>isolated analyzer workers"]
+    D --> F
+
+    F --> G["Chunk reports"]
+    G --> H["merge_reports.py<br/>deduplicate and consolidate"]
+
+    H --> I["Analyzer JSON and XLSX<br/>inventory, metrics, and lineage"]
+    I --> J["build_hierarchy.py<br/>root trees, paths, and classifications"]
+
+    J --> K["plan_migration_batch.py<br/>closed-lineage and history-aware planning"]
+    K --> L{"Job already migrated?"}
+
+    L -->|"No"| M["transpile_batch.py"]
+    L -->|"Yes"| N["Reuse prior artifact"]
+
+    M --> O["PySpark/Spark SQL notebooks"]
+    M --> P["Condensed Switch specs"]
+    M --> Q["Standalone DataStage XML"]
+    M --> R["Databricks Asset Bundle and<br/>Lakeflow Workflow resource"]
+
+    N --> R
+    O --> S["Batch artifacts and migration state"]
+    P --> S
+    Q --> S
+    R --> S
+
+    Q --> T["run-dbxconv<br/>optional offline BladeBridge conversion"]
+    T --> U["BladeBridge notebooks or SQL"]
+
+    R --> V["Deploy and run<br/>optional"]
+    S --> W["Batch manifest and progress state"]
+```
+
+The exact artifacts and counts are derived from the selected source and lineage closure rather
+than fixed in the workflow.
 
 ## Package layout
 
@@ -32,61 +80,82 @@ lakebridge_workflow/
 │   ├── plan_migration_batch.py
 │   ├── transpile_batch.py
 │   └── run_dbxconv.py
-└── dist/lakebridge_workflow-0.1.0-py3-none-any.whl
+└── dist/                        # built wheel artifacts
 ```
 
 ## Build the wheel
 
+From the package folder:
+
 ```powershell
-cd migration/lakebridge_workflow
 uv build --wheel --out-dir dist
 ```
 
-The checked-in artifact is:
+From `migration/`:
 
-```text
-dist/lakebridge_workflow-0.1.0-py3-none-any.whl
+```powershell
+uv build --wheel --out-dir lakebridge_workflow/dist lakebridge_workflow
 ```
 
 ## Install and run
 
-From either the repository root or `migration/`, use the local wheel with `uv`:
+Select the newest wheel dynamically rather than referring to a fixed package version.
+
+PowerShell:
 
 ```powershell
 cd migration
-uv run `
-  --with ./lakebridge_workflow/dist/lakebridge_workflow-0.1.0-py3-none-any.whl `
-  lakebridge-workflow --version
+$wheel = Get-ChildItem .\lakebridge_workflow\dist\*.whl |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+uv run --with $wheel.FullName lakebridge-workflow --version
 ```
 
-Or install it into an existing Python environment:
+Bash or Zsh:
+
+```bash
+cd migration
+wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
+
+uv run --with "$wheel" lakebridge-workflow --version
+```
+
+Or install the selected wheel into an existing Python environment:
 
 ```powershell
-python -m pip install ./lakebridge_workflow/dist/lakebridge_workflow-0.1.0-py3-none-any.whl
+python -m pip install $wheel.FullName
 lakebridge-workflow --version
 ```
 
-The package locates the migration checkout from the current directory or from:
+The package locates a migration checkout from the current directory or its parents. To point
+to a checkout explicitly, set:
 
 ```powershell
-$env:LAKEBRIDGE_MIGRATION_ROOT = "C:\path\to\Retail-Store-Data-Modeling-and-Analysis-using-DataStage\migration"
+$env:LAKEBRIDGE_MIGRATION_ROOT = "C:\path\to\repository\migration"
 ```
 
 ## One-command end-to-end workflow
 
-This command runs all four phases:
+The command runs four generic phases:
 
-1. Offline assessment of the 24 available jobs
+1. Analyzer assessment
 2. Sequence-to-ETL hierarchy construction
 3. Closed-lineage batch planning
 4. Deterministic batch transpilation
 
+Use `<target-new-items>` as the desired number of new migration items:
+
 ```powershell
 cd migration
+$wheel = Get-ChildItem .\lakebridge_workflow\dist\*.whl |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
 uv run `
-  --with ./lakebridge_workflow/dist/lakebridge_workflow-0.1.0-py3-none-any.whl `
+  --with $wheel.FullName `
   lakebridge-workflow workflow `
-  --num-jobs 12 `
+  --num-jobs <target-new-items> `
   --reset-history `
   --overwrite
 ```
@@ -97,29 +166,30 @@ Preview assessment, hierarchy, and the batch plan without changing migration sta
 lakebridge-workflow workflow --plan-only
 ```
 
-The retail project has one master root (`Seq_Retail_DW_Master`) and 23 downstream ETL jobs.
-Because the planner never cuts a root tree in half, a `--num-jobs 12` request still selects
-the complete 24-item closure. Batch 001 therefore contains:
+A selected root sequence is always migrated with its full descendant closure. If the first
+root closure is larger than `<target-new-items>`, the planner keeps the complete tree instead
+of cutting it in half.
 
-- 23 compiled PySpark/Spark SQL notebooks
-- 1 Lakeflow Workflow resource (`workflow_batch_001.yml`)
-- 24 condensed Switch input specifications
-- 24 standalone DataStage XML files converted from the available DSX exports
-- 4 copied support notebooks (`_setup`, `_check_dim_customer`, `_promote_dim_customer`,
-  `_dqx_validate`)
-- a self-contained Databricks Asset Bundle
-- `manifest.json`, `batch_summary.csv`, and `migration_state.json`
+The generated batch directory contains artifacts derived from the selected lineage:
+
+- compiled PySpark/Spark SQL notebooks for selected parallel jobs
+- a Lakeflow Workflow resource for the selected root sequence
+- condensed Switch input specifications for newly migrated jobs
+- standalone DataStage XML files when source DSX files are available
+- support notebooks required by the source sequence
+- a Databricks Asset Bundle
+- `manifest.json`, `batch_summary.csv`, and updates to `migration_state.json`
 
 ## Individual commands
 
-After installing the wheel, the same tools are available through one CLI:
+After installing the wheel, the tools are available through one CLI:
 
 ```powershell
 lakebridge-workflow analyze --list-tech
-lakebridge-workflow analyze --source-directory ../switch_input --report-file ../consolidated_all_jobs.xlsx --source-tech Datastage --generate-json
-lakebridge-workflow build-hierarchy --input-json ../consolidated_all_jobs.json --out-prefix ../job_hierarchy
-lakebridge-workflow plan --num-jobs 12 --dry-run
-lakebridge-workflow transpile --num-jobs 12 --reset-history --overwrite
+lakebridge-workflow analyze --source-directory <condensed-or-xml-source> --report-file <report-prefix>.xlsx --source-tech Datastage --generate-json
+lakebridge-workflow build-hierarchy --input-json <report-prefix>.json --out-prefix <hierarchy-prefix>
+lakebridge-workflow plan --num-jobs <target-new-items> --dry-run
+lakebridge-workflow transpile --num-jobs <target-new-items> --reset-history --overwrite
 lakebridge-workflow plan --status
 ```
 
@@ -132,37 +202,49 @@ python -m lakebridge_workflow workflow --plan-only
 
 ## Generated assessment
 
-The consolidated fallback report uses the checked-in official analyzer workbook for node
-counts, complexity, checksums, and transformation counts. It reports:
+The consolidated report computes its values from the selected source at runtime. It includes:
 
-- **24 unique items**: 23 parallel jobs + 1 sequence
-- **946 total nodes**
-- Complexity: **5 VERY_HIGH**, **17 HIGH**, **2 MEDIUM**
-- **23 sequence-to-job links**
-- **23 root-to-leaf paths**, all at depth 1
+- total unique items
+- total nodes
+- counts by job type
+- counts by complexity level
+- sequence-to-job links
+- root-to-leaf lineage paths
+- transformations, parameters, expressions, attributes, and embedded SQL when available
+
+The exact numbers depend on the source export or condensed-job directory passed to the CLI.
 
 ## Large-export workflow
 
-When the original export is available, split it first:
+When a large DataStage export is available, profile it first:
 
 ```powershell
-lakebridge-workflow split EFBI_PRD_for_Sequence_Job_Only.txt --profile-only
+lakebridge-workflow split <export-file> --profile-only
+```
 
-lakebridge-workflow split EFBI_PRD_for_Sequence_Job_Only.txt `
-  --out-dir seq_only_chunks --jobs-per-file 500 --only-job-type 2
+Split sequence and ETL jobs into independently analyzable chunks:
 
-lakebridge-workflow split EFBI_PRD_for_Sequence_Job_Only.txt `
-  --out-dir etl_only_chunks --jobs-per-file 500 --exclude-job-type 2 --skip-table-defs
+```powershell
+lakebridge-workflow split <export-file> `
+  --out-dir <sequence-chunks-dir> `
+  --jobs-per-file <jobs-per-chunk> `
+  --only-job-type <job-type>
+
+lakebridge-workflow split <export-file> `
+  --out-dir <etl-chunks-dir> `
+  --jobs-per-file <jobs-per-chunk> `
+  --exclude-job-type <job-type> `
+  --skip-table-defs
 ```
 
 Analyze chunks with isolated workers:
 
 ```powershell
 lakebridge-workflow analyze-parallel `
-  --chunks-dir seq_only_chunks `
-  --out-dir seq_reports `
-  --merge-prefix consolidated_sequence_jobs `
-  --workers 6 `
+  --chunks-dir <chunks-dir> `
+  --out-dir <worker-reports-dir> `
+  --merge-prefix <merged-report-prefix> `
+  --workers <worker-count> `
   --generate-json
 ```
 
@@ -171,63 +253,54 @@ on `PATH`. For a nonstandard launcher, pass its command through `--external-comm
 
 ```powershell
 lakebridge-workflow analyze-parallel `
-  --chunks-dir etl_only_chunks `
-  --out-dir etl_reports `
-  --merge-prefix consolidated_etl_jobs `
-  --workers 6 `
+  --chunks-dir <chunks-dir> `
+  --out-dir <worker-reports-dir> `
+  --merge-prefix <merged-report-prefix> `
+  --workers <worker-count> `
   --generate-json `
-  --external-command '"C:\path\to\analyzer.exe" --source-directory {source} --report-file {report} --source-tech Datastage --generate-json'
+  --external-command '"<analyzer-executable>" --source-directory {source} --report-file {report} --source-tech Datastage --generate-json'
 ```
 
 Combine report directories without rerunning workers:
 
 ```powershell
 lakebridge-workflow merge-reports `
-  --reports-dir seq_reports `
-  --reports-dir etl_reports `
-  --out-prefix consolidated_all_jobs
+  --reports-dir <sequence-worker-reports-dir> `
+  --reports-dir <etl-worker-reports-dir> `
+  --out-prefix <merged-report-prefix>
 ```
 
 The official technology name remains case-sensitive: `Datastage` (capital `D`, lowercase `s`).
 
 ## Offline BladeBridge conversion
 
-Unpack the BladeBridge plugin wheel into `migration/bb_plugin/`, then run:
+Unpack the BladeBridge plugin into a local plugin directory, then convert either an XML
+folder or a single XML file:
 
 ```powershell
 lakebridge-workflow run-dbxconv `
-  bb_plugin `
-  migrated_batches/batch_001/xml `
-  migrated_batches/batch_001/bladebridge_pyspark `
-  PYSPARK
+  <plugin-dir> `
+  <xml-source-or-dir> `
+  <output-dir> `
+  <PYSPARK|SPARKSQL|DBSQL>
 ```
 
 On Windows, use the wrapper:
 
 ```powershell
 .\scripts\run_dbxconv.ps1 `
-  -XmlPath ..\migrated_batches\batch_001\xml `
-  -OutputDir ..\migrated_batches\batch_001\bladebridge_pyspark `
-  -Target PYSPARK `
-  -PluginDir ..\bb_plugin
+  -XmlPath <xml-source-or-dir> `
+  -OutputDir <output-dir> `
+  -Target <PYSPARK|SPARKSQL|DBSQL> `
+  -PluginDir <plugin-dir>
 ```
 
-Supported targets are `PYSPARK`, `SPARKSQL`, and `DBSQL`.
+## Validation
 
-## Validation summary
+The package is validated by:
 
-The checked-in wheel was built with Python 3.13 and validated with Python 3.14:
-
-```text
-lakebridge-workflow 0.1.0
-Supported source technologies:
-  Datastage
-```
-
-The packaged end-to-end workflow was exercised against this checkout and produced:
-
-```text
-assessment=24 items/946 nodes
-hierarchy=1 root/23 active ETL
-batch=23 notebooks, 24 specs, 24 XML, 28 workflow tasks, 24 state items
-```
+- compiling all Python modules
+- installing the built wheel into a clean virtual environment
+- checking the installed `lakebridge-workflow` entry point
+- listing the supported source technology
+- running the complete workflow against a disposable migration checkout and output directory

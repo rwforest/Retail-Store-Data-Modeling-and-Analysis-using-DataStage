@@ -49,7 +49,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Transpile a planned closed-lineage migration batch")
     p.add_argument("--input-json", type=Path, default=MIGRATION_ROOT / "job_hierarchy.json")
     p.add_argument("--state-file", type=Path, default=MIGRATION_ROOT / "migration_state.json")
-    p.add_argument("--num-jobs", type=int, default=12)
+    p.add_argument("--num-jobs", type=int)
     p.add_argument("--filter")
     p.add_argument("--reset-history", action="store_true")
     p.add_argument("--output-root", type=Path, default=MIGRATION_ROOT / "migrated_batches")
@@ -58,6 +58,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--no-xml", action="store_true", help="Do not create standalone XML copies")
     p.add_argument("--overwrite", action="store_true", help="Replace an existing batch directory")
     args = p.parse_args(argv)
+    if args.num_jobs is None:
+        p.error("--num-jobs is required")
     if args.num_jobs <= 0:
         p.error("--num-jobs must be positive")
     return args

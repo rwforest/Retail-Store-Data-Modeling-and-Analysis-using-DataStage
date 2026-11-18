@@ -536,7 +536,7 @@ workspace login to install, and here it still fails with `Client has not yet reg
 [`run_dbxconv.py`](lakebridge_workflow/src/lakebridge_workflow/run_dbxconv.py), exposed as `lakebridge-workflow run-dbxconv`, calls the `dbxconv` binary once per XML file:
 
 ```bash
-uv run --python 3.12 --with migration/lakebridge_workflow/dist/lakebridge_workflow-0.1.0-py3-none-any.whl \
+uv run --python 3.12 --with "$(ls -t migration/lakebridge_workflow/dist/*.whl | head -n 1)" \
   lakebridge-workflow run-dbxconv <extracted plugin dir> <dir of .xml> <output dir> PYSPARK
 #                                                                                       PYSPARK | SPARKSQL | DBSQL
 ```
@@ -721,8 +721,9 @@ python3 migration/build_bundle.py                                          # job
 
 # optional packaged closed-lineage analyzer/hierarchy/batch workflow
 cd migration/lakebridge_workflow && uv build --wheel --out-dir dist && cd ..
-uv run --with ./lakebridge_workflow/dist/lakebridge_workflow-0.1.0-py3-none-any.whl \
-  lakebridge-workflow workflow --num-jobs 12 --reset-history --overwrite
+wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
+uv run --with "$wheel" \
+  lakebridge-workflow workflow --num-jobs <target-new-items> --reset-history --overwrite
 python3 migration/dsx_condense.py "DataStage Jobs/Pipeline" migration/switch_input
 python3 migration/switch_prompt/build_prompt.py                            # Switch prompt (few-shots from compiled)
 
