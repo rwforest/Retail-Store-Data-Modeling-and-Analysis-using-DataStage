@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lakebridge-workflow"
+version = "0.1.0"
+description = "Repository-aware Lakebridge analyzer, hierarchy, planning, and migration workflow"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Retail DW migration maintainers" }]
+keywords = ["databricks", "lakebridge", "datastage", "migration", "etl"]
+
+[project.scripts]
+lakebridge-workflow = "lakebridge_workflow.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

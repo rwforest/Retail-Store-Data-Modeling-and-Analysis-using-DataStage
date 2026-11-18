@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""Transpile one planned, closed-lineage batch using the repository's deterministic compiler.
+
+For each new parallel job this script uses ``ds2spark.Compiler`` (the same compiler as the
+checked-in reference notebooks). For each root sequence it emits a Databricks Asset Bundle
+and Lakeflow workflow. Jobs already present in ``migration_state.json`` are not recompiled;
+the workflow points to their earlier notebook path. If the source DSX files are available,
+standalone XML files are also emitted for optional offline BladeBridge conversion.
+
+Current repository example::
+
+    lakebridge-workflow transpile --num-jobs 12 --reset-history
+"""
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import shutil
+import sys
+from pathlib import Path
+from typing import Any
+
+from .common import atomic_json
+from .paths import find_migration_root
+from .plan_migration_batch import apply_manifest, empty_state, make_plan, normalize_state
+
+MIGRATION_ROOT = find_migration_root()
+REPO = MIGRATION_ROOT.parent
+
+
+def load_module(name: str, path: Path):
+    sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+pipeline = load_module("retail_pipeline_def", REPO / "pipeline" / "pipeline_def.py")
+ds2spark = load_module("retail_ds2spark", MIGRATION_ROOT / "ds2spark.py")
+build_bundle = load_module("retail_build_bundle", MIGRATION_ROOT / "build_bundle.py")
+dsx_to_xml = load_module("retail_dsx_to_xml", MIGRATION_ROOT / "dsx_to_xml.py")
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Transpile a planned closed-lineage migration batch")
+    p.add_argument("--input-json", type=Path, default=MIGRATION_ROOT / "job_hierarchy.json")
+    p.add_argument("--state-file", type=Path, default=MIGRATION_ROOT / "migration_state.json")
+    p.add_argument("--num-jobs", type=int, default=12)
+    p.add_argument("--filter")
+    p.add_argument("--reset-history", action="store_true")
+    p.add_argument("--output-root", type=Path, default=MIGRATION_ROOT / "migrated_batches")
+    p.add_argument("--switch-input-dir", type=Path, default=MIGRATION_ROOT / "switch_input")
+    p.add_argument("--source-dsx-dir", type=Path, default=REPO / "DataStage Jobs" / "Pipeline")
+    p.add_argument("--no-xml", action="store_true", help="Do not create standalone XML copies")
+    p.add_argument("--overwrite", action="store_true", help="Replace an existing batch directory")
+    args = p.parse_args(argv)
+    if args.num_jobs <= 0:
+        p.error("--num-jobs must be positive")
+    return args
+
+
+def load_state(path: Path, reset: bool) -> dict[str, Any]:
+    if reset:
+        return empty_state()
+    if not path.is_file():
+        return empty_state()
+    try:
+        return normalize_state(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"error: cannot read {path}: {exc}") from exc
+
+
+def write_notebook(job: Any, directory: Path) -> Path:
+    path = directory / f"{job.name}.py"
+    path.write_text(ds2spark.Compiler(job).compile(), encoding="utf-8")
+    return path
+
+
+def create_xml(name: str, source_dsx_dir: Path, xml_dir: Path) -> Path | None:
+    source = source_dsx_dir / f"{name}.dsx"
+    if not source.is_file():
+        return None
+    nodes = dsx_to_xml.parse(source.read_text(encoding="cp1252"))
+    xml_dir.mkdir(parents=True, exist_ok=True)
+    target = xml_dir / f"{name}.xml"
+    target.write_text(dsx_to_xml.to_xml(nodes), encoding="utf-8")
+    return target
+
+
+def copy_switch_spec(name: str, source_dir: Path, target_dir: Path) -> bool:
+    source = source_dir / f"{name}.txt"
+    if not source.is_file():
+        return False
+    target_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target_dir / source.name)
+    return True
+
+
+def copy_support_notebooks(notebook_dir: Path) -> int:
+    names = ["_setup.py", "_check_dim_customer.py", "_promote_dim_customer.py", "_dqx_validate.py"]
+    source_dir = MIGRATION_ROOT / "bundle" / "src" / "notebooks"
+    copied = 0
+    for name in names:
+        source = source_dir / name
+        if source.is_file():
+            shutil.copy2(source, notebook_dir / name)
+            copied += 1
+    return copied
+
+
+def reused_notebook_path(state: dict[str, Any], name: str) -> str:
+    artifact = str(state.get("migrated", {}).get(name, {}).get("artifact_path", ""))
+    prefix = "migrated_batches/"
+    if artifact.startswith(prefix):
+        return "../../" + artifact[len(prefix):]
+    return f"../../{name}.py"
+
+
+def workflow_yaml(batch_id: int, root_names: list[str], new_jobs: set[str],
+                  all_jobs: set[str], state: dict[str, Any]) -> str:
+    tasks = build_bundle.build_tasks()
+    selected = all_jobs
+    # Keep support tasks needed by the retail DAG; they are copied into this batch.
+    included = [t for t in tasks if t["nb"].startswith("_") or t["nb"] in selected]
+    keys = {t["key"] for t in included}
+    out = [
+        "resources:", "  jobs:", f"    workflow_batch_{batch_id:03d}:",
+        f"      name: {' + '.join(root_names)} batch_{batch_id:03d} (${{bundle.target}})",
+        "      description: Complete DataStage lineage closure migrated by transpile_batch.py",
+        "      parameters:",
+        "        - {name: catalog, default: '${var.catalog}'}",
+        "        - {name: schema, default: '${var.schema}'}",
+        "        - {name: src_dir, default: '${var.src_dir}'}",
+        "        - {name: pRunDate, default: '2011-12-31'}",
+        "        - {name: pEffDate, default: '2011-07-01'}",
+        "      environments:",
+        "        - environment_key: dqx",
+        "          spec:",
+        "            environment_version: '5'",
+        "            dependencies: ['databricks-labs-dqx==0.17.0']",
+        "      tasks:",
+    ]
+
+    def emit(key: str, notebook: str, deps: list[tuple[str, str | None]], extra: list[str] = []):
+        out.append(f"        - task_key: {key}")
+        if deps:
+            out.append("          depends_on:")
+            for dep_key, _trigger in deps:
+                if dep_key in keys or dep_key == "cond_dim_missing":
+                    out.append(f"            - task_key: {dep_key}")
+        out.append("          notebook_task:")
+        out.append(f"            notebook_path: {notebook}")
+        out.append("            base_parameters:")
+        for param in ("catalog", "schema", "src_dir", "pRunDate", "pEffDate"):
+            out.append(f"              {param}: '{{{{job.parameters.{param}}}}}'")
+        out.extend(extra)
+
+    for task in included:
+        key, nb, deps = task["key"], task["nb"], task["deps"]
+        if key == "J05_Dim_Customer_Initial":
+            deps = [("cond_dim_missing", "true")]
+        elif key == "J06_Dim_Customer_SCD2":
+            deps = [("J05_Dim_Customer_Initial", None), ("check_dim_customer", None)]
+        if nb.startswith("_"):
+            path = f"../notebooks/{nb}.py"
+        elif nb in new_jobs:
+            path = f"../notebooks/{nb}.py"
+        else:
+            path = reused_notebook_path(state, nb)
+        extra = ["          run_if: NONE_FAILED"] if key == "J06_Dim_Customer_SCD2" else []
+        emit(key, path, deps, extra)
+        if key == "check_dim_customer":
+            out.extend([
+                "        - task_key: cond_dim_missing",
+                "          depends_on:", "            - task_key: check_dim_customer",
+                "          condition_task:", "            op: EQUAL_TO",
+                "            left: '{{tasks.check_dim_customer.values.dim_state}}'",
+                "            right: MISSING",
+            ])
+
+    final = [key for key in sorted(selected) if key.startswith("J") and key[1:3].isdigit() and int(key[1:3]) >= 14]
+    if final:
+        emit("dqx_validate", "../notebooks/_dqx_validate.py", [(k, None) for k in final])
+        out.append("          environment_key: dqx")
+    return "\n".join(out) + "\n"
+
+
+def write_batch_summary(manifest: dict[str, Any], batch_dir: Path) -> Path:
+    import csv
+    path = batch_dir / "batch_summary.csv"
+    rows = [["Batch_ID", "Job_Name", "Type", "Complexity", "Folder", "Action",
+             "Root_Sequence", "Total_Nodes", "Source_Chunk", "From_Batch_ID"]]
+    for job in manifest["new_jobs_in_bottom_up_order"]:
+        rows.append([manifest["batch_id"], job["name"], job["type"], job["complexity"],
+                     job["folder"], job["action"], job["root_sequence"], job["total_nodes"],
+                     job["source_chunk"], ""])
+    for job in manifest["reused_jobs_from_history"]:
+        rows.append([manifest["batch_id"], job["name"], job["type"], job["complexity"],
+                     job["folder"], job["action"], job["root_sequence"], job["total_nodes"],
+                     job["source_chunk"], job.get("from_batch_id", "")])
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        csv.writer(handle).writerows(rows)
+    return path
+
+
+def databricks_yaml(batch_id: int) -> str:
+    return f"""bundle:
+  name: retail_dw_batch_{batch_id:03d}
+
+variables:
+  catalog:
+    description: Unity Catalog catalog that holds the migrated tables
+  schema:
+    default: retail_dw_batch_{batch_id:03d}
+  src_dir:
+    description: UC volume path holding the Source_Data CSVs
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      profile: DEFAULT
+    variables:
+      catalog: unitygo
+      schema: retail_dw_batch_{batch_id:03d}
+      src_dir: /Volumes/unitygo/retail_dw/landing
+"""
+
+
+def run(args: argparse.Namespace) -> int:
+    state = load_state(args.state_file, args.reset_history)
+    manifest = make_plan(args, state)
+    if manifest is None:
+        print("No eligible unmigrated root sequences remain.")
+        return 0
+
+    batch_id = int(manifest["batch_id"])
+    batch_dir = args.output_root / f"batch_{batch_id:03d}"
+    if batch_dir.exists():
+        if not args.overwrite:
+            raise SystemExit(f"error: {batch_dir} already exists; pass --overwrite to replace it")
+        shutil.rmtree(batch_dir)
+    notebooks = batch_dir / "notebooks"
+    switch_dir = batch_dir / "switch_input"
+    xml_dir = batch_dir / "xml"
+    bundle = batch_dir / "bundle"
+    resources = bundle / "resources"
+    notebooks.mkdir(parents=True)
+    switch_dir.mkdir(parents=True)
+    resources.mkdir(parents=True)
+
+    pipeline_jobs = {j.name: j for j in pipeline.build_all()}
+    new_names = {j["name"] for j in manifest["new_jobs_in_bottom_up_order"] if j["action"] == "MIGRATE_NOTEBOOK"}
+    all_names = {j["name"] for j in manifest["new_jobs_in_bottom_up_order"]} | {
+        j["name"] for j in manifest["reused_jobs_from_history"]
+    }
+
+    compiled = 0
+    for name in sorted(new_names):
+        if name not in pipeline_jobs:
+            raise SystemExit(f"error: selected parallel job has no pipeline_def model: {name}")
+        write_notebook(pipeline_jobs[name], notebooks)
+        compiled += 1
+    copied_support = copy_support_notebooks(notebooks)
+
+    # Switch specs are inputs for newly transpiled jobs only. Reused history jobs are
+    # deliberately not copied again; the workflow references their earlier artifacts.
+    new_item_names = {job["name"] for job in manifest["new_jobs_in_bottom_up_order"]}
+    specs = 0
+    for name in sorted(new_item_names):
+        specs += int(copy_switch_spec(name, args.switch_input_dir, switch_dir))
+
+    xml_count = 0
+    if not args.no_xml:
+        for name in sorted(new_names):
+            if create_xml(name, args.source_dsx_dir, xml_dir) is not None:
+                xml_count += 1
+        sequence_names = [j["name"] for j in manifest["new_jobs_in_bottom_up_order"]
+                          if j["action"] == "MIGRATE_ORCHESTRATION"]
+        for name in sequence_names:
+            if create_xml(name, args.source_dsx_dir, xml_dir) is not None:
+                xml_count += 1
+
+    root_names = list(manifest["selected_root_sequences"])
+    (bundle / "databricks.yml").write_text(databricks_yaml(batch_id), encoding="utf-8")
+    (resources / f"workflow_batch_{batch_id:03d}.yml").write_text(
+        workflow_yaml(batch_id, root_names, new_names, all_names, state), encoding="utf-8")
+    atomic_json(batch_dir / "manifest.json", manifest)
+    summary_path = write_batch_summary(manifest, batch_dir)
+
+    state = apply_manifest(state, manifest)
+    atomic_json(args.state_file, state)
+
+    print(f"Batch {batch_id:03d}: {batch_dir}")
+    print(f"  New notebooks:      {compiled}")
+    print(f"  Support notebooks: {copied_support}")
+    print(f"  Switch specs:      {specs}")
+    print(f"  Standalone XML:    {xml_count}")
+    print(f"  Reused jobs:       {manifest['reused_jobs_from_history_count']}")
+    print(f"  Workflow:          {resources / f'workflow_batch_{batch_id:03d}.yml'}")
+    print(f"  Summary:           {summary_path}")
+    print(f"  State:             {args.state_file}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run(parse_args(argv))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

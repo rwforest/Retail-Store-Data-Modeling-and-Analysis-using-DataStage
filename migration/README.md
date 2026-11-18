@@ -533,10 +533,11 @@ workspace login to install, and here it still fails with `Client has not yet reg
 
 ### 8a.2 Convert
 
-[`run_dbxconv.py`](run_dbxconv.py) calls the `dbxconv` binary once per XML file:
+[`run_dbxconv.py`](lakebridge_workflow/src/lakebridge_workflow/run_dbxconv.py), exposed as `lakebridge-workflow run-dbxconv`, calls the `dbxconv` binary once per XML file:
 
 ```bash
-.bbvenv/bin/python -I migration/run_dbxconv.py <extracted plugin dir> <dir of .xml> <output dir> PYSPARK
+uv run --python 3.12 --with migration/lakebridge_workflow/dist/lakebridge_workflow-0.1.0-py3-none-any.whl \
+  lakebridge-workflow run-dbxconv <extracted plugin dir> <dir of .xml> <output dir> PYSPARK
 #                                                                                       PYSPARK | SPARKSQL | DBSQL
 ```
 
@@ -717,6 +718,11 @@ Prerequisites: Databricks CLI ≥ 1.0, profile `DEFAULT` on the workspace, and `
 python3 migration/dsx_to_xml.py "DataStage Jobs/Pipeline" migration/xml   # XML for Lakebridge Analyzer
 python3 migration/ds2spark.py                                              # compiled notebooks
 python3 migration/build_bundle.py                                          # job YAML + support notebooks
+
+# optional packaged closed-lineage analyzer/hierarchy/batch workflow
+cd migration/lakebridge_workflow && uv build --wheel --out-dir dist && cd ..
+uv run --with ./lakebridge_workflow/dist/lakebridge_workflow-0.1.0-py3-none-any.whl \
+  lakebridge-workflow workflow --num-jobs 12 --reset-history --overwrite
 python3 migration/dsx_condense.py "DataStage Jobs/Pipeline" migration/switch_input
 python3 migration/switch_prompt/build_prompt.py                            # Switch prompt (few-shots from compiled)
 
@@ -758,7 +764,7 @@ Two operational notes. With two CLI profiles on the same host, Lakebridge's inne
 | `ds2spark.py` | Deterministic compiler: job model → Databricks notebooks |
 | `build_bundle.py` | Master sequence → Lakeflow Job YAML + support notebooks |
 | `run_bladebridge.py` | Runs BladeBridge through its Python wrapper (kept as the reproduction of the no-output issue) |
-| `run_dbxconv.py` | Runs BladeBridge's `dbxconv` directly, offline, for PYSPARK / SPARKSQL / DBSQL (§8a) |
+| `lakebridge_workflow/` | Installable end-to-end workflow package: streaming splitter, analyzer, hierarchy, planning, batch transpiler, BladeBridge runner, Windows wrapper, guide, and built wheel |
 | `compare_notebooks.py` | Static view-by-view comparison of two notebook sets |
 | `switch_prompt/` | `build_prompt.py` → `datastage_to_notebook.yml` (Switch custom prompt) |
 | `switch_config.yml` | Switch configuration (prompt path, adaptive thinking) |
