@@ -722,6 +722,23 @@ python3 migration/build_bundle.py                                          # job
 # optional packaged closed-lineage analyzer/hierarchy/batch workflow
 cd migration/lakebridge_workflow && uv build --wheel --out-dir dist && cd ..
 wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
+
+# Complete workflow from either a DSExport or a condensed-job directory.
+# Default chunk size: 500 jobs per XML chunk.
+uv run --with "$wheel" \
+  lakebridge-workflow migrate \
+  --source <DSExport-or-condensed-source> \
+  --num-jobs <target-new-items> \
+  --jobs-per-file <jobs-per-chunk> \
+  --workers <analyzer-worker-count> \
+  --transpile-workers <transpiler-worker-count> \
+  --analysis-dir <analysis-dir> \
+  --state-file <state-file> \
+  --output-root <batch-output-root> \
+  --reset-history \
+  --overwrite
+
+# Shortcut for the current condensed-job checkout.
 uv run --with "$wheel" \
   lakebridge-workflow workflow \
   --num-jobs <target-new-items> \

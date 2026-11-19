@@ -18,8 +18,9 @@ Both paths converge on the same analyzer, hierarchy, planning, and transpilation
 
 ```mermaid
 flowchart TD
-    A["DataStage source"] --> B{"Source format"}
-    B -->|"Large DSExport XML/TXT"| C["split_datastage_xml.py<br/>streaming profiler and chunker"]
+    CMD["lakebridge-workflow migrate"] --> A["DataStage source"]
+    A --> B{"Source format"}
+    B -->|"Large DSExport XML/TXT"| C["split_datastage_xml.py<br/>streaming profiler and chunker<br/>500 jobs per chunk by default"]
     B -->|"Condensed job specs"| D["Condensed-job directory<br/>(for example switch_input/)"]
 
     C --> E["Job-type-filtered XML chunks"]
@@ -77,6 +78,7 @@ lakebridge_workflow/
 │   ├── analyze_parallel.py
 │   ├── merge_reports.py
 │   ├── build_hierarchy.py
+│   ├── migrate.py
 │   ├── plan_migration_batch.py
 │   ├── transpile_batch.py
 │   └── run_dbxconv.py
@@ -135,9 +137,47 @@ to a checkout explicitly, set:
 $env:LAKEBRIDGE_MIGRATION_ROOT = "C:\path\to\repository\migration"
 ```
 
-## One-command end-to-end workflow
+## One-command migration workflow
 
-The command runs four generic phases:
+Use `migrate` to run the complete workflow from either a large `DSExport` file or a
+condensed-job directory. For a `DSExport`, the command automatically:
+
+1. Splits sequence and ETL jobs into XML chunks
+2. Analyzes the chunks in parallel
+3. Merges the reports
+4. Builds the job hierarchy
+5. Plans a closed-lineage batch
+6. Transpiles the batch in parallel
+
+The default chunk size is `500` jobs per XML chunk. Override it with
+`--jobs-per-file <jobs-per-chunk>`.
+
+```powershell
+lakebridge-workflow migrate `
+  --source <DSExport-or-condensed-source> `
+  --num-jobs <target-new-items> `
+  --jobs-per-file <jobs-per-chunk> `
+  --workers <analyzer-worker-count> `
+  --transpile-workers <transpiler-worker-count> `
+  --analysis-dir <analysis-dir> `
+  --state-file <state-file> `
+  --output-root <batch-output-root> `
+  --reset-history `
+  --overwrite
+```
+
+If an official analyzer is not on `PATH`, pass its launcher through
+`--external-command`. The command accepts the same `{source}`, `{report}`, and `{json}`
+placeholders used by `analyze-parallel`.
+
+Generated chunk and report subdirectories under `<analysis-dir>` are recreated on each run so
+stale files from a previous export cannot enter the new analysis. Use a different
+`<analysis-dir>` if you need to preserve a previous analysis run.
+
+## One-command condensed workflow
+
+The `workflow` command is a shortcut for an existing condensed-job checkout. It runs four
+generic phases:
 
 1. Analyzer assessment
 2. Sequence-to-ETL hierarchy construction

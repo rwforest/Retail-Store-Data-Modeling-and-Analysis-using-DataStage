@@ -28,15 +28,13 @@ from pathlib import Path
 from . import analyze, merge_reports
 from .common import atomic_json, now_utc
 
-
-
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Parallel Lakebridge Analyzer runner")
     p.add_argument("--chunks-dir", required=True, type=Path,
                    help="Directory of XML chunks, or directory of condensed .txt jobs")
     p.add_argument("--out-dir", required=True, type=Path, help="Root output directory")
     p.add_argument("--merge-prefix", type=Path, help="Merged report prefix (default: <out-dir>/consolidated)")
-    p.add_argument("--workers", type=int, default=6, help="Number of concurrent workers (default: 6)")
+    p.add_argument("--workers", type=int, default=0, help="Analyzer worker processes (0 = automatically use available CPUs)")
     p.add_argument("--jobs-per-worker", type=int, default=4,
                    help="Condensed jobs grouped per local worker (ignored for XML chunks)")
     p.add_argument("--generate-json", action="store_true", help="Generate chunk and merged JSON reports")
@@ -96,7 +94,7 @@ def external_worker(index: int, source: Path, out_dir: Path, command: str | None
     temp_dir.mkdir(exist_ok=True)
     report = output / f"report_chunk_{index:04d}.xlsx"
     cmd = [
-        sys.executable, str(HERE / "analyze.py"),
+        sys.executable, "-m", "lakebridge_workflow.analyze",
         "--source-directory", str(source), "--report-file", str(report),
         "--source-tech", "Datastage", "--generate-json",
     ]
@@ -110,8 +108,8 @@ def external_worker(index: int, source: Path, out_dir: Path, command: str | None
 
 
 def run(args: argparse.Namespace) -> int:
-    if args.workers <= 0:
-        raise SystemExit("error: --workers must be positive")
+    if args.workers < 0:
+        raise SystemExit("error: --workers must be zero or positive")
     if args.jobs_per_worker <= 0:
         raise SystemExit("error: --jobs-per-worker must be positive")
     files, is_xml = discover_chunks(args)
@@ -125,7 +123,7 @@ def run(args: argparse.Namespace) -> int:
     if is_xml:
         # analyze.py discovers databricks-bb-analyzer on PATH; --external-command remains
         # available for installations that expose a different launcher or binary path.
-        worker_count = min(args.workers, len(files))
+        worker_count = args.workers or min(os.cpu_count() or 1, len(files))
         print(f"Running {len(files)} official analyzer chunk(s) across {worker_count} worker(s)")
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="analyzer") as pool:
             futures = {pool.submit(external_worker, i, source, args.out_dir, args.external_command): i
@@ -154,7 +152,7 @@ def run(args: argparse.Namespace) -> int:
     # merge_reports.py deduplicates the repeated sequence inventory later.
     if parallel_files:
         groups = [group + sequence_files for group in groups]
-    worker_count = min(args.workers, len(groups))
+    worker_count = args.workers or min(os.cpu_count() or 1, len(groups))
     print(f"Running {len(groups)} local worker chunk(s) across {worker_count} thread(s)")
     with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="analyzer") as pool:
         futures = {
