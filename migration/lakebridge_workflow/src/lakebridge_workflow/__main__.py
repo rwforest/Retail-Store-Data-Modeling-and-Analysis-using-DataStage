@@ -14,6 +14,7 @@ COMMAND_MODULES = {
     "build-hierarchy": "build_hierarchy",
     "merge-reports": "merge_reports",
     "migrate": "migrate",
+    "optimize": "optimize",
     "plan": "plan_migration_batch",
     "run-dbxconv": "run_dbxconv",
     "split": "split_datastage_xml",

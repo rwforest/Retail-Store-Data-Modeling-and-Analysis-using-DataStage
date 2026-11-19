@@ -44,7 +44,7 @@ def run(args: argparse.Namespace) -> int:
     hierarchy_json = args.hierarchy_prefix.with_suffix(".json")
 
     analyze = importlib.import_module(".analyze", __package__)
-    print("Step 1/4: offline assessment", flush=True)
+    print("Step 1/5: offline assessment", flush=True)
     rc = analyze.main([
         "--source-directory", str(root / "switch_input"),
         "--report-file", str(xlsx),
@@ -56,7 +56,7 @@ def run(args: argparse.Namespace) -> int:
         return rc
 
     build_hierarchy = importlib.import_module(".build_hierarchy", __package__)
-    print("Step 2/4: lineage hierarchy", flush=True)
+    print("Step 2/5: lineage hierarchy", flush=True)
     rc = build_hierarchy.main([
         "--input-json", str(report_json),
         "--out-prefix", str(args.hierarchy_prefix),
@@ -64,8 +64,18 @@ def run(args: argparse.Namespace) -> int:
     if rc:
         return rc
 
+    optimize = importlib.import_module(".optimize", __package__)
+    print("Step 3/5: optimization index (truncate/reload, SCD2, duplicate queries, merge candidates)",
+          flush=True)
+    rc = optimize.main([
+        "--input-json", str(report_json),
+        "--out-prefix", str(args.assessment_prefix.parent / "optimization_report"),
+    ])
+    if rc:
+        return rc
+
     plan_migration_batch = importlib.import_module(".plan_migration_batch", __package__)
-    print("Step 3/4: closed-lineage plan", flush=True)
+    print("Step 4/5: closed-lineage plan", flush=True)
     plan_args = [
         "--input-json", str(hierarchy_json),
         "--state-file", str(args.state_file),
@@ -79,7 +89,7 @@ def run(args: argparse.Namespace) -> int:
         return rc
 
     transpile_batch = importlib.import_module(".transpile_batch", __package__)
-    print("Step 4/4: batch transpilation", flush=True)
+    print("Step 5/5: batch transpilation", flush=True)
     transpile_args = [
         "--input-json", str(hierarchy_json),
         "--state-file", str(args.state_file),

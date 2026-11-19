@@ -8,10 +8,10 @@
   expects a directory of staged inputs.
 
 .EXAMPLE
-  .\run_dbxconv.ps1 -XmlPath .\migrated_batches\batch_001\xml\J01_Land_Orders.xml -OutputDir .\tmp\bladebridge -Target PYSPARK
+  .\run_dbxconv.ps1 -XmlPath .\migrated_batches\batch_001\xml\J01_Land_Orders.xml -OutputDir .\tmp\bladebridge
 
 .EXAMPLE
-  .\run_dbxconv.ps1 -XmlPath .\migrated_batches\batch_001\xml -OutputDir .\migrated_batches\batch_001\bladebridge_pyspark -Target PYSPARK
+  .\run_dbxconv.ps1 -XmlPath .\migrated_batches\batch_001\xml -OutputDir .\migrated_batches\batch_001\bladebridge_dbsql -Target DBSQL
 #>
 [CmdletBinding()]
 param(
@@ -23,7 +23,7 @@ param(
 
     [Parameter()]
     [ValidateSet("PYSPARK", "SPARKSQL", "DBSQL")]
-    [string]$Target = "PYSPARK",
+    [string]$Target = "DBSQL",
 
     [Parameter()]
     [string]$PluginDir = "bb_plugin",

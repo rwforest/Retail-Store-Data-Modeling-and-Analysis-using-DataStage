@@ -63,8 +63,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Optional: manually unpacked databricks_bb_plugin wheel root; required "
                         "when --run-dbxconv is used (default: bb_plugin)")
     p.add_argument("--dbxconv-target", choices=("PYSPARK", "SPARKSQL", "DBSQL"),
-                   default="PYSPARK",
-                   help="Optional: BladeBridge conversion target (default: PYSPARK)")
+                   default="DBSQL",
+                   help="Optional: BladeBridge conversion target (default: DBSQL)")
     p.add_argument("--dbxconv-output-dir", type=Path,
                    help="Optional: BladeBridge output directory; defaults to "
                         "<batch-dir>/bladebridge_<target>")
@@ -223,16 +223,17 @@ def run_bladebridge_phase(args: argparse.Namespace) -> Path:
 def run(args: argparse.Namespace) -> int:
     if not args.source.exists():
         raise SystemExit(f"error: source not found: {args.source}")
+    total = 7 if args.run_dbxconv else 6
 
     if is_dsexport(args.source):
-        print("Phase 1/5: split, analyze, and merge DSExport chunks", flush=True)
+        print(f"Phase 1/{total}: split, analyze, and merge DSExport chunks", flush=True)
         report_json = run_dsexport_analysis(args)
     else:
-        print("Phase 1/5: analyze condensed jobs", flush=True)
+        print(f"Phase 1/{total}: analyze condensed jobs", flush=True)
         report_json = run_condensed_analysis(args)
 
     build_hierarchy = importlib.import_module(".build_hierarchy", __package__)
-    print("Phase 2/5: lineage hierarchy", flush=True)
+    print(f"Phase 2/{total}: lineage hierarchy", flush=True)
     hierarchy_prefix = args.analysis_dir / "job_hierarchy"
     rc = build_hierarchy.main([
         "--input-json", str(report_json),
@@ -242,8 +243,19 @@ def run(args: argparse.Namespace) -> int:
         raise SystemExit(f"error: hierarchy build failed with exit code {rc}")
     hierarchy_json = hierarchy_prefix.with_suffix(".json")
 
+    optimize = importlib.import_module(".optimize", __package__)
+    print(f"Phase 3/{total}: optimization index (truncate/reload, SCD2, duplicate queries, merge candidates)",
+          flush=True)
+    optimize_prefix = args.analysis_dir / "optimization_report"
+    rc = optimize.main([
+        "--input-json", str(report_json),
+        "--out-prefix", str(optimize_prefix),
+    ])
+    if rc:
+        raise SystemExit(f"error: optimization analysis failed with exit code {rc}")
+
     plan_migration_batch = importlib.import_module(".plan_migration_batch", __package__)
-    print("Phase 3/5: closed-lineage plan", flush=True)
+    print(f"Phase 4/{total}: closed-lineage plan", flush=True)
     plan_args = [
         "--input-json", str(hierarchy_json),
         "--state-file", str(args.state_file),
@@ -257,7 +269,7 @@ def run(args: argparse.Namespace) -> int:
         return rc
 
     transpile_batch = importlib.import_module(".transpile_batch", __package__)
-    print("Phase 4/5: parallel batch transpilation", flush=True)
+    print(f"Phase 5/{total}: parallel batch transpilation", flush=True)
     transpile_args = [
         "--input-json", str(hierarchy_json),
         "--state-file", str(args.state_file),
@@ -279,12 +291,12 @@ def run(args: argparse.Namespace) -> int:
         return rc
 
     if args.run_dbxconv:
-        print("Phase 5/6: optional BladeBridge conversion", flush=True)
+        print(f"Phase 6/{total}: optional BladeBridge conversion (literal lift-and-shift)", flush=True)
         bladebridge_dir = run_bladebridge_phase(args)
         print(f"  BladeBridge output: {bladebridge_dir}", flush=True)
-        print("Phase 6/6: migration state update", flush=True)
+        print(f"Phase 7/{total}: migration state update", flush=True)
     else:
-        print("Phase 5/5: migration state update", flush=True)
+        print(f"Phase 6/{total}: migration state update", flush=True)
     # transpile_batch updates migration_state atomically.
     print("Migration workflow complete", flush=True)
     return 0

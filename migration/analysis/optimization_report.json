@@ -1,0 +1,1025 @@
+{
+  "runInfo": {
+    "sourceReport": "/tmp/optcheck/consolidated.json",
+    "builtAt": "2026-11-19T18:59:10Z",
+    "sourceTechnology": "Datastage"
+  },
+  "summary": {
+    "totalJobsScanned": 24,
+    "jobsWithFindings": 23,
+    "byBand": {
+      "HIGH": 7,
+      "MEDIUM": 12,
+      "LOW": 4
+    },
+    "truncateReloadWrites": 42,
+    "scd2Candidates": 1,
+    "duplicateQueryGroups": 7,
+    "queriesWithoutFilters": 9,
+    "mergeCandidateGroups": 6
+  },
+  "optimizationIndex": [
+    {
+      "job": "J10_Fact_Sales",
+      "complexityLevel": "VERY_HIGH",
+      "score": 14,
+      "band": "HIGH",
+      "findings": [
+        "3 truncate-and-reload write(s)",
+        "shares duplicate logic in 4 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-002",
+        "DUP-003",
+        "DUP-005",
+        "DUP-007"
+      ]
+    },
+    {
+      "job": "J06_Dim_Customer_SCD2",
+      "complexityLevel": "VERY_HIGH",
+      "score": 10,
+      "band": "HIGH",
+      "findings": [
+        "hand-rolled SCD2/change-detection pattern",
+        "2 truncate-and-reload write(s)",
+        "shares duplicate logic in 1 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-006"
+      ]
+    },
+    {
+      "job": "J09_Dim_Date_Promo_FX",
+      "complexityLevel": "HIGH",
+      "score": 10,
+      "band": "HIGH",
+      "findings": [
+        "3 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter",
+        "shares duplicate logic in 1 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-001"
+      ]
+    },
+    {
+      "job": "J11_Fact_Returns",
+      "complexityLevel": "HIGH",
+      "score": 10,
+      "band": "HIGH",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "shares duplicate logic in 3 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-002",
+        "DUP-003",
+        "DUP-006"
+      ]
+    },
+    {
+      "job": "J07_Dim_Product",
+      "complexityLevel": "HIGH",
+      "score": 8,
+      "band": "HIGH",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter",
+        "shares duplicate logic in 1 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-001"
+      ]
+    },
+    {
+      "job": "J08_Dim_Store_Employee",
+      "complexityLevel": "HIGH",
+      "score": 8,
+      "band": "HIGH",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter",
+        "shares duplicate logic in 1 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-001"
+      ]
+    },
+    {
+      "job": "J17_Mart_Customer_360",
+      "complexityLevel": "VERY_HIGH",
+      "score": 8,
+      "band": "HIGH",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "shares duplicate logic in 2 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-004",
+        "DUP-006"
+      ]
+    },
+    {
+      "job": "J01_Land_Orders",
+      "complexityLevel": "HIGH",
+      "score": 6,
+      "band": "MEDIUM",
+      "findings": [
+        "4 truncate-and-reload write(s)"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J04_Land_Stores_Employees",
+      "complexityLevel": "HIGH",
+      "score": 6,
+      "band": "MEDIUM",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J14_Analysis_Employee_Transactions",
+      "complexityLevel": "HIGH",
+      "score": 6,
+      "band": "MEDIUM",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J15_Analysis_CustomerType_Profit",
+      "complexityLevel": "HIGH",
+      "score": 6,
+      "band": "MEDIUM",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J16_Bonus_Program",
+      "complexityLevel": "HIGH",
+      "score": 6,
+      "band": "MEDIUM",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "shares duplicate logic in 1 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-006"
+      ]
+    },
+    {
+      "job": "J18_Mart_Product_Performance",
+      "complexityLevel": "HIGH",
+      "score": 6,
+      "band": "MEDIUM",
+      "findings": [
+        "2 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J02_Land_Customers",
+      "complexityLevel": "HIGH",
+      "score": 4,
+      "band": "MEDIUM",
+      "findings": [
+        "2 truncate-and-reload write(s)"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J03_Land_Products",
+      "complexityLevel": "HIGH",
+      "score": 4,
+      "band": "MEDIUM",
+      "findings": [
+        "2 truncate-and-reload write(s)"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J12_Fact_Invoice",
+      "complexityLevel": "MEDIUM",
+      "score": 4,
+      "band": "MEDIUM",
+      "findings": [
+        "1 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J20_Mart_Store_Monthly",
+      "complexityLevel": "HIGH",
+      "score": 4,
+      "band": "MEDIUM",
+      "findings": [
+        "1 truncate-and-reload write(s)",
+        "1 join/query without an upstream filter"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J22_DQ_Fact_Checks",
+      "complexityLevel": "VERY_HIGH",
+      "score": 4,
+      "band": "MEDIUM",
+      "findings": [
+        "1 truncate-and-reload write(s)",
+        "shares duplicate logic in 1 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-007"
+      ]
+    },
+    {
+      "job": "J23_Reconcile_Source_To_Fact",
+      "complexityLevel": "HIGH",
+      "score": 4,
+      "band": "MEDIUM",
+      "findings": [
+        "1 truncate-and-reload write(s)",
+        "shares duplicate logic in 1 group(s)"
+      ],
+      "duplicateGroupIds": [
+        "DUP-005"
+      ]
+    },
+    {
+      "job": "J05_Dim_Customer_Initial",
+      "complexityLevel": "MEDIUM",
+      "score": 2,
+      "band": "LOW",
+      "findings": [
+        "1 truncate-and-reload write(s)"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J13_Mart_RETAIL_DATA_MART",
+      "complexityLevel": "HIGH",
+      "score": 2,
+      "band": "LOW",
+      "findings": [
+        "1 truncate-and-reload write(s)"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J19_Mart_Basket_Affinity",
+      "complexityLevel": "HIGH",
+      "score": 2,
+      "band": "LOW",
+      "findings": [
+        "1 truncate-and-reload write(s)"
+      ],
+      "duplicateGroupIds": []
+    },
+    {
+      "job": "J21_Mart_Promo_Effectiveness",
+      "complexityLevel": "HIGH",
+      "score": 2,
+      "band": "LOW",
+      "findings": [
+        "1 truncate-and-reload write(s)"
+      ],
+      "duplicateGroupIds": []
+    }
+  ],
+  "truncateReloadWrites": [
+    {
+      "job": "J01_Land_Orders",
+      "stage": "tgt_stg_orders",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J01_Land_Orders",
+      "stage": "tgt_rej_orders",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    },
+    {
+      "job": "J01_Land_Orders",
+      "stage": "tgt_dq_order_anomalies",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    },
+    {
+      "job": "J01_Land_Orders",
+      "stage": "tgt_audit_land_orders",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    },
+    {
+      "job": "J02_Land_Customers",
+      "stage": "tgt_stg_customers_2010",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J02_Land_Customers",
+      "stage": "tgt_stg_customers_2011",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J03_Land_Products",
+      "stage": "tgt_stg_products",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J03_Land_Products",
+      "stage": "tgt_stg_active_products",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J04_Land_Stores_Employees",
+      "stage": "tgt_stg_stores",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J04_Land_Stores_Employees",
+      "stage": "tgt_stg_employees",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J05_Dim_Customer_Initial",
+      "stage": "tgt_dim_customer",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J06_Dim_Customer_SCD2",
+      "stage": "tgt_dim_customer_next",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J06_Dim_Customer_SCD2",
+      "stage": "tgt_audit_scd2_customer",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    },
+    {
+      "job": "J07_Dim_Product",
+      "stage": "tgt_dim_product",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J07_Dim_Product",
+      "stage": "tgt_audit_products_by_category",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    },
+    {
+      "job": "J08_Dim_Store_Employee",
+      "stage": "tgt_dim_store",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J08_Dim_Store_Employee",
+      "stage": "tgt_dim_employee",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J09_Dim_Date_Promo_FX",
+      "stage": "tgt_dim_date",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J09_Dim_Date_Promo_FX",
+      "stage": "tgt_dim_promotion",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J09_Dim_Date_Promo_FX",
+      "stage": "tgt_dim_fx",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J10_Fact_Sales",
+      "stage": "tgt_fact_sales",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J10_Fact_Sales",
+      "stage": "tgt_dq_orphan_products",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    },
+    {
+      "job": "J10_Fact_Sales",
+      "stage": "tgt_audit_fact_by_month",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J11_Fact_Returns",
+      "stage": "tgt_fact_returns",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J11_Fact_Returns",
+      "stage": "tgt_audit_returns_by_category",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    },
+    {
+      "job": "J12_Fact_Invoice",
+      "stage": "tgt_fact_invoice",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J13_Mart_RETAIL_DATA_MART",
+      "stage": "tgt_mart_retail_data_mart",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J14_Analysis_Employee_Transactions",
+      "stage": "tgt_employee_transactions",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J14_Analysis_Employee_Transactions",
+      "stage": "tgt_top10_employees",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J15_Analysis_CustomerType_Profit",
+      "stage": "tgt_customer_type_ranking",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J15_Analysis_CustomerType_Profit",
+      "stage": "tgt_customer_type_winner",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J16_Bonus_Program",
+      "stage": "tgt_bonus_program",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J16_Bonus_Program",
+      "stage": "tgt_bonus_summary",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J17_Mart_Customer_360",
+      "stage": "tgt_mart_customer_360",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J17_Mart_Customer_360",
+      "stage": "tgt_segment_summary",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J18_Mart_Product_Performance",
+      "stage": "tgt_mart_product_performance",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J18_Mart_Product_Performance",
+      "stage": "tgt_top50_products",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": false,
+      "note": "Full overwrite on every run; review whether the source is a full snapshot (expected) or could be read incrementally."
+    },
+    {
+      "job": "J19_Mart_Basket_Affinity",
+      "stage": "tgt_mart_basket_affinity",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J20_Mart_Store_Monthly",
+      "stage": "tgt_mart_store_monthly",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J21_Mart_Promo_Effectiveness",
+      "stage": "tgt_mart_promo_effectiveness",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": false,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J22_DQ_Fact_Checks",
+      "stage": "tgt_dq_fact_checks",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": true,
+      "note": "Dimension/fact/mart-style target; a strong Auto CDC / MERGE candidate if the source can be read incrementally."
+    },
+    {
+      "job": "J23_Reconcile_Source_To_Fact",
+      "stage": "tgt_audit_reconciliation",
+      "property": "append\\\\overwrite",
+      "value": "overwrite",
+      "auditLike": true,
+      "dimFactLike": false,
+      "note": "Audit/reject/DQ-style target; reload is likely intentional, lower priority."
+    }
+  ],
+  "scd2Candidates": [
+    {
+      "job": "J06_Dim_Customer_SCD2",
+      "complexityLevel": "VERY_HIGH",
+      "joinStages": [
+        "jn_Snapshot_vs_Current"
+      ],
+      "changeDetectionStages": [
+        "tgt_audit_scd2_customer",
+        "xfm_Carry_Unchanged",
+        "xfm_Detect_Change",
+        "xfm_Expire_Old",
+        "xfm_New_Version"
+      ],
+      "note": "Hand-rolled change detection; a candidate for create_auto_cdc_from_snapshot_flow from a staged snapshot."
+    }
+  ],
+  "duplicateQueries": [
+    {
+      "kind": "derivation_expression",
+      "normalizedText": "@partitionnum + (@numpartitions * (@inrownum - 1)) + 1",
+      "sampleText": "@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1",
+      "jobs": [
+        "J07_Dim_Product",
+        "J08_Dim_Store_Employee",
+        "J09_Dim_Date_Promo_FX"
+      ],
+      "occurrences": [
+        {
+          "job": "J07_Dim_Product",
+          "stage": "CTransformerStage",
+          "text": "@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1"
+        },
+        {
+          "job": "J08_Dim_Store_Employee",
+          "stage": "CTransformerStage",
+          "text": "@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1"
+        },
+        {
+          "job": "J08_Dim_Store_Employee",
+          "stage": "CTransformerStage",
+          "text": "@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1"
+        },
+        {
+          "job": "J09_Dim_Date_Promo_FX",
+          "stage": "CTransformerStage",
+          "text": "@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1"
+        }
+      ],
+      "groupId": "DUP-001"
+    },
+    {
+      "kind": "derivation_expression",
+      "normalizedText": "nulltovalue(lnk_p.category, \"unknown\")",
+      "sampleText": "NullToValue(lnk_p.category, \"Unknown\")",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J11_Fact_Returns"
+      ],
+      "occurrences": [
+        {
+          "job": "J10_Fact_Sales",
+          "stage": "CTransformerStage",
+          "text": "NullToValue(lnk_p.category, \"Unknown\")"
+        },
+        {
+          "job": "J11_Fact_Returns",
+          "stage": "CTransformerStage",
+          "text": "NullToValue(lnk_p.category, \"Unknown\")"
+        }
+      ],
+      "groupId": "DUP-002"
+    },
+    {
+      "kind": "derivation_expression",
+      "normalizedText": "nulltovalue(lnk_p.product_sk, -1)",
+      "sampleText": "NullToValue(lnk_p.product_sk, -1)",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J11_Fact_Returns"
+      ],
+      "occurrences": [
+        {
+          "job": "J10_Fact_Sales",
+          "stage": "CTransformerStage",
+          "text": "NullToValue(lnk_p.product_sk, -1)"
+        },
+        {
+          "job": "J11_Fact_Returns",
+          "stage": "CTransformerStage",
+          "text": "NullToValue(lnk_p.product_sk, -1)"
+        }
+      ],
+      "groupId": "DUP-003"
+    },
+    {
+      "kind": "filter_predicate",
+      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0",
+      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0",
+      "jobs": [
+        "J17_Mart_Customer_360"
+      ],
+      "occurrences": [
+        {
+          "job": "J17_Mart_Customer_360",
+          "stage": "flt_Known_Customers",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0"
+        },
+        {
+          "job": "J17_Mart_Customer_360",
+          "stage": "flt_Known_Returns",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0"
+        }
+      ],
+      "groupId": "DUP-004"
+    },
+    {
+      "kind": "filter_predicate",
+      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0",
+      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J23_Reconcile_Source_To_Fact"
+      ],
+      "occurrences": [
+        {
+          "job": "J10_Fact_Sales",
+          "stage": "flt_Sales_Lines",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0"
+        },
+        {
+          "job": "J23_Reconcile_Source_To_Fact",
+          "stage": "flt_Sales_Lines",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0"
+        }
+      ],
+      "groupId": "DUP-005"
+    },
+    {
+      "kind": "filter_predicate",
+      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0",
+      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0",
+      "jobs": [
+        "J06_Dim_Customer_SCD2",
+        "J11_Fact_Returns",
+        "J16_Bonus_Program",
+        "J17_Mart_Customer_360"
+      ],
+      "occurrences": [
+        {
+          "job": "J06_Dim_Customer_SCD2",
+          "stage": "flt_Current_Rows",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+        },
+        {
+          "job": "J11_Fact_Returns",
+          "stage": "flt_Current_Customer",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+        },
+        {
+          "job": "J16_Bonus_Program",
+          "stage": "flt_Current_Customer",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+        },
+        {
+          "job": "J17_Mart_Customer_360",
+          "stage": "flt_Current_Customer",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+        }
+      ],
+      "groupId": "DUP-006"
+    },
+    {
+      "kind": "filter_predicate",
+      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0",
+      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J22_DQ_Fact_Checks"
+      ],
+      "occurrences": [
+        {
+          "job": "J10_Fact_Sales",
+          "stage": "flt_Orphan_Product",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0"
+        },
+        {
+          "job": "J22_DQ_Fact_Checks",
+          "stage": "flt_orphan_product_lines",
+          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0"
+        }
+      ],
+      "groupId": "DUP-007"
+    }
+  ],
+  "queriesWithoutFilters": [
+    {
+      "job": "J04_Land_Stores_Employees",
+      "kind": "join_without_filter",
+      "stages": [
+        "agg_Emp_By_Store",
+        "jn_Store_EmpCount"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J07_Dim_Product",
+      "kind": "join_without_filter",
+      "stages": [
+        "agg_Products_By_Category"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J08_Dim_Store_Employee",
+      "kind": "join_without_filter",
+      "stages": [
+        "jn_Emp_Store"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J09_Dim_Date_Promo_FX",
+      "kind": "join_without_filter",
+      "stages": [
+        "jn_Country_FX"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J12_Fact_Invoice",
+      "kind": "join_without_filter",
+      "stages": [
+        "agg_Invoice"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J14_Analysis_Employee_Transactions",
+      "kind": "join_without_filter",
+      "stages": [
+        "agg_Transactions",
+        "jn_Employee"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J15_Analysis_CustomerType_Profit",
+      "kind": "join_without_filter",
+      "stages": [
+        "agg_By_Type"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J18_Mart_Product_Performance",
+      "kind": "join_without_filter",
+      "stages": [
+        "agg_Product_Returns",
+        "agg_Product_Sales",
+        "jn_Product",
+        "jn_Sales_Returns"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    },
+    {
+      "job": "J20_Mart_Store_Monthly",
+      "kind": "join_without_filter",
+      "stages": [
+        "agg_Store_Month",
+        "jn_Store"
+      ],
+      "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
+    }
+  ],
+  "mergeCandidates": [
+    {
+      "groupId": "DUP-001",
+      "kind": "derivation_expression",
+      "jobs": [
+        "J07_Dim_Product",
+        "J08_Dim_Store_Employee",
+        "J09_Dim_Date_Promo_FX"
+      ],
+      "occurrenceCount": 4,
+      "sampleText": "@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1",
+      "suggestion": "Identical derivation logic reused across jobs; factor it into a shared UDF or notebook function."
+    },
+    {
+      "groupId": "DUP-002",
+      "kind": "derivation_expression",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J11_Fact_Returns"
+      ],
+      "occurrenceCount": 2,
+      "sampleText": "NullToValue(lnk_p.category, \"Unknown\")",
+      "suggestion": "Identical derivation logic reused across jobs; factor it into a shared UDF or notebook function."
+    },
+    {
+      "groupId": "DUP-003",
+      "kind": "derivation_expression",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J11_Fact_Returns"
+      ],
+      "occurrenceCount": 2,
+      "sampleText": "NullToValue(lnk_p.product_sk, -1)",
+      "suggestion": "Identical derivation logic reused across jobs; factor it into a shared UDF or notebook function."
+    },
+    {
+      "groupId": "DUP-005",
+      "kind": "filter_predicate",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J23_Reconcile_Source_To_Fact"
+      ],
+      "occurrenceCount": 2,
+      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0",
+      "suggestion": "Identical filter predicate reused across jobs; factor it into a shared view or macro instead of repeating it per job."
+    },
+    {
+      "groupId": "DUP-006",
+      "kind": "filter_predicate",
+      "jobs": [
+        "J06_Dim_Customer_SCD2",
+        "J11_Fact_Returns",
+        "J16_Bonus_Program",
+        "J17_Mart_Customer_360"
+      ],
+      "occurrenceCount": 4,
+      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0",
+      "suggestion": "Identical filter predicate reused across jobs; factor it into a shared view or macro instead of repeating it per job."
+    },
+    {
+      "groupId": "DUP-007",
+      "kind": "filter_predicate",
+      "jobs": [
+        "J10_Fact_Sales",
+        "J22_DQ_Fact_Checks"
+      ],
+      "occurrenceCount": 2,
+      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0",
+      "suggestion": "Identical filter predicate reused across jobs; factor it into a shared view or macro instead of repeating it per job."
+    }
+  ]
+}

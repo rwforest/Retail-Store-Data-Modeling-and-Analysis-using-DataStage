@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Run BladeBridge ``dbxconv`` offline for one XML file or a folder of XML files.
 
+This is a literal lift-and-shift: ``dbxconv`` converts each job stage by stage with no
+re-architecture. For optimization opportunities (truncate-and-reload writes, hand-rolled
+SCD2, duplicate queries, missing filters), run ``lakebridge-workflow optimize`` separately
+over the analyzer report; it does not change what this converter produces.
+
 Usage (current, plugin option)::
 
     lakebridge-workflow run-dbxconv --plugin-dir bb_plugin \\
-        migrated_batches/batch_001/xml migrated_batches/batch_001/bladebridge_pyspark PYSPARK
+        migrated_batches/batch_001/xml migrated_batches/batch_001/bladebridge_dbsql DBSQL
 
 Legacy positional form is also accepted::
 
-    lakebridge-workflow run-dbxconv bb_plugin input_dir output_dir PYSPARK
+    lakebridge-workflow run-dbxconv bb_plugin input_dir output_dir DBSQL
 
 Each job is converted in an isolated work folder:
 ``<output>/<job>/originals/<job>.xml``, ``<output>/<job>/out/``, and
@@ -35,7 +40,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--plugin-dir", type=Path, default=Path("bb_plugin"),
                    help="Manually unpacked databricks_bb_plugin wheel root; not installed by "
                         "the workflow package")
-    p.add_argument("--target", choices=TARGETS, help="Conversion target (default PYSPARK)")
+    p.add_argument("--target", choices=TARGETS, help="Conversion target (default DBSQL)")
     p.add_argument("--fail-fast", action="store_true", help="Stop at first failed conversion")
     p.add_argument("--continue-on-error", action="store_true",
                    help="Compatibility alias; process all jobs before returning nonzero (default behavior)")
@@ -63,7 +68,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         p.error("expected INPUT OUTPUT [TARGET], optionally preceded by PLUGIN_DIR")
 
     args.source, args.output, args.plugin_dir = source, output, plugin
-    args.target = (target or "PYSPARK").upper()
+    args.target = (target or "DBSQL").upper()
     if args.target not in TARGETS:
         p.error(f"invalid target {args.target}; choose one of {', '.join(TARGETS)}")
     return args

@@ -32,6 +32,7 @@ flowchart TD
 
     H --> I["Analyzer JSON and XLSX<br/>inventory, metrics, and lineage"]
     I --> J["build_hierarchy.py<br/>root trees, paths, and classifications"]
+    I --> J2["optimize.py<br/>truncate/reload, SCD2, duplicate-query,<br/>and merge-candidate scoring"]
 
     J --> K["plan_migration_batch.py<br/>closed-lineage and history-aware planning"]
     K --> L{"Job already migrated?"}
@@ -50,11 +51,12 @@ flowchart TD
     Q --> S
     R --> S
 
-    Q --> T["run-dbxconv / migrate --run-dbxconv<br/>optional offline BladeBridge conversion"]
+    Q --> T["run-dbxconv / migrate --run-dbxconv<br/>optional offline BladeBridge conversion<br/>(literal lift-and-shift, DBSQL by default)"]
     T --> U["BladeBridge notebooks or SQL"]
 
     R --> V["Deploy and run<br/>optional"]
     S --> W["Batch manifest and progress state"]
+    J2 --> X["Optimization report JSON/XLSX<br/>optimization index + merge candidates"]
 ```
 
 The exact artifacts and counts are derived from the selected source and lineage closure rather
@@ -78,6 +80,7 @@ lakebridge_workflow/
 │   ├── analyze_parallel.py
 │   ├── merge_reports.py
 │   ├── build_hierarchy.py
+│   ├── optimize.py             # truncate/reload, SCD2, duplicate-query, merge-candidate report
 │   ├── migrate.py
 │   ├── plan_migration_batch.py
 │   ├── transpile_batch.py
@@ -217,9 +220,16 @@ condensed-job directory. For a `DSExport`, the command automatically:
 2. Analyzes the chunks in parallel
 3. Merges the reports
 4. Builds the job hierarchy
-5. Plans a closed-lineage batch
-6. Transpiles the batch in parallel
-7. Optionally runs offline BladeBridge conversion when `--run-dbxconv` is supplied
+5. Scores optimization opportunities (truncate/reload writes, hand-rolled SCD2, duplicate
+   queries, missing filters) and merge candidates
+6. Plans a closed-lineage batch
+7. Transpiles the batch in parallel
+8. Optionally runs offline BladeBridge conversion when `--run-dbxconv` is supplied
+
+`dbxconv` (step 8) stays a literal lift-and-shift: it converts each job stage by stage
+with no re-architecture. The optimization report (step 5) is the only place this workflow
+suggests re-architecting anything, and it never changes what `dbxconv` or the deterministic
+transpiler produce.
 
 ### Required flags
 
@@ -254,7 +264,7 @@ lakebridge-workflow migrate `
 | `--no-xml` | `false` | Skip standalone XML copies; notebooks are still generated |
 | `--run-dbxconv` | `false` | Run offline BladeBridge conversion after deterministic transpilation |
 | `--dbxconv-plugin-dir` | `bb_plugin` | Manually unpacked `databricks_bb_plugin` wheel root; used only with `--run-dbxconv` |
-| `--dbxconv-target` | `PYSPARK` | BladeBridge target: `PYSPARK`, `SPARKSQL`, or `DBSQL` |
+| `--dbxconv-target` | `DBSQL` | BladeBridge target: `PYSPARK`, `SPARKSQL`, or `DBSQL` |
 | `--dbxconv-output-dir` | `<batch-dir>/bladebridge_<target>` | BladeBridge output directory; used only with `--run-dbxconv` |
 
 Common path, chunking, worker, and analyzer overrides are:
@@ -361,6 +371,7 @@ After installing the wheel, the tools are available through one CLI:
 lakebridge-workflow analyze --list-tech
 lakebridge-workflow analyze --source-directory <condensed-or-xml-source> --report-file <report-prefix>.xlsx --source-tech Datastage --generate-json
 lakebridge-workflow build-hierarchy --input-json <report-prefix>.json --out-prefix <hierarchy-prefix>
+lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix <optimization-report-prefix>
 lakebridge-workflow plan --num-jobs <target-new-items> --dry-run
 lakebridge-workflow transpile `
   --num-jobs <target-new-items> `
@@ -390,6 +401,35 @@ The consolidated report computes its values from the selected source at runtime.
 - transformations, parameters, expressions, attributes, and embedded SQL when available
 
 The exact numbers depend on the source export or condensed-job directory passed to the CLI.
+
+## Optimization report
+
+`optimize` runs a second, independent scoring pass over the same consolidated JSON
+`build-hierarchy` consumes. It does not touch `dbxconv` or the deterministic transpiler;
+both stay a literal lift-and-shift. It looks for four known DataStage-to-Databricks wins:
+
+| Finding | What it looks for | The Databricks win |
+|---|---|---|
+| Truncate-and-reload writes | A target stage whose write mode is a full overwrite/truncate/replace | `MERGE` or Auto CDC instead of a full rewrite every run |
+| Hand-rolled SCD2 / change-detection | A Join between a snapshot and the current state, branching by hand into expire/carry/new-version logic | `create_auto_cdc_from_snapshot_flow` -- this repository's own SCD2 job (`migration/README.md` §7) is the worked example |
+| Duplicate queries | The same embedded SQL statement, filter predicate, or derivation expression repeated across jobs | Factor into one shared view, macro, or parameterized job |
+| Filters pushed too late | A join/lookup/aggregation with no filter stage anywhere in the job, or embedded SQL with no `WHERE` | Push the predicate before the expensive stage |
+
+Each job gets an **optimization index** score and a HIGH/MEDIUM/LOW band, the same shape
+as the Analyzer's own complexity index, so the two reports read side by side: complexity
+says how hard a job is to migrate, the optimization index says how worth re-architecting
+it is once it lands. Duplicate-logic groups that span two or more jobs are also listed
+separately as **merge candidates** -- the specific jobs sharing the duplicated logic, and
+a suggested consolidation.
+
+```powershell
+lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix optimization_report
+```
+
+Output: `optimization_report.json` / `.xlsx` with a `Summary`, `Optimization Index`,
+`Truncate-Reload Writes`, `SCD2 Candidates`, `Duplicate Queries`, `Queries Without
+Filters`, and `Merge Candidates` tab. `migrate` and `workflow` run it automatically
+(no extra flag) right after the hierarchy build.
 
 ## Large-export workflow
 
@@ -451,15 +491,21 @@ The official technology name remains case-sensitive: `Datastage` (capital `D`, l
 
 ## Offline BladeBridge conversion
 
+`run-dbxconv` is a literal lift-and-shift: it converts each job stage by stage with no
+re-architecture. For optimization opportunities, run `optimize` separately; it reads the
+same analyzer report and never changes what this converter produces.
+
 Unpack the BladeBridge plugin into a local plugin directory, then convert either an XML
-folder or a single XML file:
+folder or a single XML file. The target defaults to `DBSQL` (a plain Databricks SQL
+script) when `--target`/the positional target is omitted; `PYSPARK` and `SPARKSQL`
+notebooks are also available:
 
 ```powershell
 lakebridge-workflow run-dbxconv `
   <plugin-dir> `
   <xml-source-or-dir> `
   <output-dir> `
-  <PYSPARK|SPARKSQL|DBSQL>
+  <DBSQL|PYSPARK|SPARKSQL>
 ```
 
 On Windows, use the wrapper:

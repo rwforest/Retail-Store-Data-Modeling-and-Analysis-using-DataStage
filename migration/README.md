@@ -533,19 +533,21 @@ workspace login to install, and here it still fails with `Client has not yet reg
 
 ### 8a.2 Convert
 
-[`run_dbxconv.py`](lakebridge_workflow/src/lakebridge_workflow/run_dbxconv.py), exposed as `lakebridge-workflow run-dbxconv`, calls the `dbxconv` binary once per XML file:
+[`run_dbxconv.py`](lakebridge_workflow/src/lakebridge_workflow/run_dbxconv.py), exposed as `lakebridge-workflow run-dbxconv`, calls the `dbxconv` binary once per XML file. This is a
+literal lift-and-shift: stage-by-stage, no re-architecture (see §8b for the separate
+optimization pass). The target defaults to **`DBSQL`**:
 
 ```bash
 uv run --python 3.12 --with "$(ls -t migration/lakebridge_workflow/dist/*.whl | head -n 1)" \
-  lakebridge-workflow run-dbxconv <extracted plugin dir> <dir of .xml> <output dir> PYSPARK
-#                                                                                       PYSPARK | SPARKSQL | DBSQL
+  lakebridge-workflow run-dbxconv <extracted plugin dir> <dir of .xml> <output dir> DBSQL
+#                                                                                      DBSQL | PYSPARK | SPARKSQL (default DBSQL)
 ```
 
 | Target | Converter config | Output |
 |---|---|---|
+| `DBSQL` (default) | `datastage2dbsql.json` + `-M CodeGeneration::SQL` | Plain Databricks SQL script (`.sql`). Not offered by `lakebridge transpile`; documented in `Converter/Configs/Datastage/README.txt` |
 | `PYSPARK` | `base_datastage2databricks_pyspark.json` | Databricks notebook (Python), DataFrame API, one cell per stage |
 | `SPARKSQL` | `base_datastage2databricks_sparksql.json` | Databricks notebook (Python): one `spark.sql(...)` + temp view per stage |
-| `DBSQL` | `datastage2dbsql.json` + `-M CodeGeneration::SQL` | Plain Databricks SQL script (`.sql`). Not offered by `lakebridge transpile`; documented in `Converter/Configs/Datastage/README.txt` |
 
 Sequence jobs also produce a Databricks Workflow JSON. The raw command for one file, which is what the script does:
 
@@ -674,6 +676,74 @@ data's own XSD (e.g. `Employee.xsd`). It says nothing about the job-definition X
 
 ---
 
+## 8b. Optimization report: beyond lift-and-shift
+
+`dbxconv` (§8a) and the deterministic compiler (§2) are both a lift-and-shift: every
+DataStage stage becomes the equivalent Databricks code, one for one, with no
+re-architecture. That is the right default for a first migration, but it leaves
+DataStage-era design decisions in place that Databricks has better answers for -- most
+visibly, every target in this pipeline is a full overwrite (§2.1), and J06's SCD2 is a
+20-stage hand-rolled diff (§7) that Auto CDC now does in a few lines.
+
+[`optimize.py`](lakebridge_workflow/src/lakebridge_workflow/optimize.py), exposed as
+`lakebridge-workflow optimize`, is a second, independent scoring pass over the same
+consolidated analyzer JSON that `build-hierarchy` reads (§3). It never changes a
+generated notebook; it only reports. Four heuristics:
+
+| Finding | Signal | The Databricks win |
+|---|---|---|
+| Truncate-and-reload writes | A target stage's write mode is a full overwrite/truncate/replace (this repo: every `append\overwrite = overwrite` Sequential File target; a generic DB connector: `Table action = Truncate/Replace`) | `MERGE` or Auto CDC instead of rewriting the whole table every run |
+| Hand-rolled SCD2 / change detection | A Join between a new snapshot and the current state, branching by hand into expire/carry/new-version logic | `create_auto_cdc_from_snapshot_flow` -- exactly what §7 already proved out for J06 |
+| Duplicate queries | The same embedded SQL statement, filter predicate, or derivation expression repeated across jobs | Factor into one shared view, macro, or parameterized job |
+| Filters pushed too late | A join/lookup/aggregation with no filter stage anywhere in the job, or embedded SQL with no `WHERE` | Push the predicate before the expensive stage |
+
+Each job gets a weighted **optimization index** score and a HIGH/MEDIUM/LOW band, the
+same shape as the Analyzer's own complexity index (§3), so the two reports read side by
+side: complexity says how hard a job was to migrate, the optimization index says how
+worth re-architecting it is now that it has landed. Duplicate-logic groups spanning two
+or more jobs are also listed separately as **merge candidates** -- the specific jobs
+involved, and a suggested consolidation.
+
+```bash
+lakebridge-workflow optimize --input-json consolidated_all_jobs.json --out-prefix optimization_report
+```
+
+Output: `optimization_report.json` / `.xlsx` with `Summary`, `Optimization Index`,
+`Truncate-Reload Writes`, `SCD2 Candidates`, `Duplicate Queries`, `Queries Without
+Filters`, and `Merge Candidates` tabs. `migrate` and `workflow` (§9) run it
+automatically, right after the hierarchy build -- no extra flag. Checked in alongside
+the Analyzer's own report: [`analysis/optimization_report.xlsx`](analysis/optimization_report.xlsx)
+(and `.json`), generated from this repository's own 23 jobs the same way as §3's
+`analysis/lakebridge-analyzer.xlsx`.
+
+**Result on this repository's own 23 jobs** (`switch_input/`, analyzed offline per §3):
+
+| Band | Jobs | Typical reason |
+|---|---|---|
+| HIGH | 7 | J06 (the one genuine SCD2 pattern) plus six fact/dimension jobs combining several truncate-and-reload writes with duplicate filter or derivation logic |
+| MEDIUM | 12 | Truncate-and-reload writes on staging/mart targets, mostly without other findings |
+| LOW | 4 | A single truncate-and-reload write and nothing else |
+
+`scd2Candidates` correctly finds exactly one job, J06, and names its evidence
+(`jn_Snapshot_vs_Current`, `xfm_Detect_Change`, `xfm_Carry_Unchanged`, `xfm_Expire_Old`,
+`xfm_New_Version`) -- the same pattern §7 already replaced with Auto CDC, found here from
+the source job alone. `duplicateQueries` finds 7 groups (6 of them spanning ≥2 jobs, so 6
+merge candidates): for example J07/J08/J09 (the three dimension jobs) share a derivation
+expression, and J10/J11 (fact jobs) share both a derivation and two filter predicates --
+real candidates for a shared macro or parameterized job rather than three/two near-copies.
+`queriesWithoutFilters` flags 9 jobs whose Join/Aggregator has no Filter stage anywhere in
+the job.
+
+Like the complexity index (§3) and the DQX rule set (§5), this is a heuristic screening
+tool, not a verdict: every finding needs a human to confirm it's worth acting on before
+anything is rebuilt. The regexes match on stage/property names and text, not on parsed
+DataStage semantics, so a source with very different naming conventions will need the
+patterns in `optimize.py` tuned (the module docstring explains why `\b` word boundaries
+don't work on DataStage's `Px`-prefixed/underscore-joined identifiers, and why the
+patterns match as plain substrings instead).
+
+---
+
 ## 8. Open items and known limitations
 
 - **BladeBridge** now converts offline (§8a). Still open: re-run our 24 jobs with the collection-type fix,
@@ -705,6 +775,11 @@ data's own XSD (e.g. `Employee.xsd`). It says nothing about the job-definition X
   conflict and retry. Profile before changing it further.
 - **Environment pinning.** Jobs use serverless environment version 5. Version 2 rejects `DataFrame.cache()`.
 - **Cost.** Each Switch run uses about 0.5M tokens on `databricks-claude-sonnet-5-5`.
+- **Optimization report findings are not yet acted on** (§8b). J06's SCD2 pattern is already rebuilt as Auto CDC
+  in the SDP version (§7); the truncate-and-reload and duplicate-logic findings on the other 22 jobs are reported
+  but not yet implemented in any of the three implementations. The embedded-SQL heuristics (duplicate queries,
+  missing `WHERE`) are untested against a source that actually has embedded SQL -- this repository's 23 jobs have
+  none; the `jb_*`/`job-32.xml` samples in §8a.4 do, but were not run back through `optimize`.
 
 ---
 
@@ -728,6 +803,9 @@ wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
 # Only --source and --num-jobs are required. Default chunk size: 500 jobs per XML chunk.
 # Analyzer workers default to one per XML chunk; a lower explicit count distributes chunks.
 # Transpiler workers default to one per selected job; a lower explicit count distributes jobs.
+# An optimization report (truncate/reload, SCD2, duplicate-query, merge-candidate scoring,
+# see §8b) is generated automatically, right after the hierarchy build -- no extra flag.
+# --dbxconv-target defaults to DBSQL; dbxconv itself stays a literal lift-and-shift.
 # See migration/lakebridge_workflow/README.md for prerequisites, optional flags, and defaults.
 # databricks-bb-analyzer is installed in the uv environment; the BladeBridge plugin is only
 # needed for optional dbxconv conversion and is not installed by this package.
@@ -745,7 +823,7 @@ uv run --with "$wheel" \
   --overwrite \
   --run-dbxconv \
   --dbxconv-plugin-dir <bb-plugin-dir> \
-  --dbxconv-target <PYSPARK|SPARKSQL|DBSQL>
+  --dbxconv-target <DBSQL|PYSPARK|SPARKSQL>
 
 # Shortcut for the current condensed-job checkout.
 uv run --with "$wheel" \
@@ -795,11 +873,12 @@ Two operational notes. With two CLI profiles on the same host, Lakebridge's inne
 | `ds2spark.py` | Deterministic compiler: job model → Databricks notebooks |
 | `build_bundle.py` | Master sequence → Lakeflow Job YAML + support notebooks |
 | `run_bladebridge.py` | Runs BladeBridge through its Python wrapper (kept as the reproduction of the no-output issue) |
-| `lakebridge_workflow/` | Installable end-to-end workflow package: streaming splitter, analyzer, hierarchy, planning, batch transpiler, BladeBridge runner, Windows wrapper, guide, and built wheel |
+| `lakebridge_workflow/` | Installable end-to-end workflow package: streaming splitter, analyzer, hierarchy, optimization scoring (§8b), planning, batch transpiler, BladeBridge runner, Windows wrapper, guide, and built wheel |
 | `compare_notebooks.py` | Static view-by-view comparison of two notebook sets |
 | `switch_prompt/` | `build_prompt.py` → `datastage_to_notebook.yml` (Switch custom prompt) |
 | `switch_config.yml` | Switch configuration (prompt path, adaptive thinking) |
 | `analysis/lakebridge-analyzer.xlsx` | Lakebridge Analyzer report |
+| `analysis/optimization_report.xlsx`, `.json` | Optimization index, truncate-reload/SCD2/duplicate-query findings, and merge candidates (§8b) |
 | `bundle/` | Compiled implementation + DQX profile, validate and reconcile jobs |
 | `bundle_switch/` | Switch implementation (same support notebooks) |
 | `switch_input/` | Condensed jobs sent to Switch |
