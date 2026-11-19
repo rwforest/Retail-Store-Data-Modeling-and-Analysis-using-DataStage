@@ -448,14 +448,27 @@ logic Databricks now does natively (DataStage's own rules single out exactly thi
 a second, independent scoring pass over the same consolidated JSON that answers that
 second question, for one source technology (DataStage) instead of the Analyzer's eight.
 It does not touch `dbxconv` or the deterministic transpiler; both stay a literal
-lift-and-shift. It looks for four known DataStage-to-Databricks wins:
+lift-and-shift. It looks for nine known DataStage-to-Databricks and general SQL-tuning wins,
+grouped by what they're really about:
+
+**Re-architecting a DataStage idiom:**
 
 | Finding | What it looks for | The Databricks win |
 |---|---|---|
 | Truncate-and-reload writes | A target stage whose write mode is a full overwrite/truncate/replace | `MERGE` or Auto CDC instead of a full rewrite every run |
 | Hand-rolled SCD2 / change-detection | A Join between a snapshot and the current state, branching by hand into expire/carry/new-version logic | `create_auto_cdc_from_snapshot_flow` -- this repository's own SCD2 job (`migration/README.md` §7) is the worked example |
-| Duplicate queries | The same embedded SQL statement, filter predicate, or derivation expression repeated across jobs | Factor into one shared view, macro, or parameterized job |
+
+**General SQL/ETL tuning, independent of DataStage:**
+
+| Finding | What it looks for | The win |
+|---|---|---|
+| Duplicate queries | The same embedded SQL statement, filter predicate, or derivation expression repeated across *different* jobs | Factor into one shared view, macro, or parameterized job (also surfaced as a merge candidate) |
 | Filters pushed too late | A join/lookup/aggregation with no filter stage anywhere in the job, or embedded SQL with no `WHERE` | Push the predicate before the expensive stage |
+| Non-sargable predicates | A filter/`WHERE` wraps the compared column in a function (`Upcase(x) = 'Y'`, `UPPER(x)`, a `CAST`, a date truncation, ...) | Compare the raw column so partition pruning / data skipping can use the filter |
+| OR-heavy predicates | Several ORs in one predicate, usually across different columns | Split into separate reads unioned together, or an IN-list, so each branch prunes independently |
+| Cartesian-risk joins | A join stage with no declared key, or embedded SQL with a `JOIN` and no `ON`/`USING` | A silent row-count explosion caught before it becomes a `MERGE`/join on Databricks |
+| Embedded-SQL set-operation issues | `SELECT *`, a wide `SELECT DISTINCT`, `UNION` instead of `UNION ALL`, a subquery inside `WHERE` | Column pruning, a narrower `row_number()` dedup key, one fewer shuffle, or a join instead of a per-row subquery |
+| Repeated derivations within one job | The same non-trivial expression computed more than once in the same job (excluding DataStage's `@INROWNUM`/`@PARTITIONNUM`/`@NUMPARTITIONS` row-context macros -- two columns using the same row-numbering formula are two independent counters, not the same value twice) | Compute it once, reuse it |
 
 Each job's findings are weighted into a score, exactly the way the Analyzer starts a job
 at LOW and raises it on each break -- except here the breaks add up instead of just
@@ -463,22 +476,30 @@ raising a level, since a job can need more than one of these fixes at once:
 
 ```text
 score = 4  if hand-rolled SCD2/change-detection is present
+      + 5  if any join has no declared key (cartesian risk)
       + 2 * min(truncate-and-reload write count, 3)
       + 2 * min(join/aggregate-without-a-filter count, 3)
       + 2 * number of duplicate-logic groups this job belongs to
+      + 2 * min(repeated-derivation-within-job group count, 2)
+      + 1 * min(non-sargable predicate count, 3)
+      + 1 * min(OR-heavy predicate count, 2)
+      + 1 * min(embedded-SQL set-operation issue count, 3)
 ```
 
 | Band | Score | Typical cause |
 |---|---|---|
 | **NONE** | 0 | No findings; excluded from the report |
 | **LOW** | 1-3 | A single truncate-and-reload write and nothing else |
-| **MEDIUM** | 4-7 | Several truncate-and-reload writes, or one plus a missing filter |
-| **HIGH** | >=8 | A hand-rolled SCD2 pattern, or several findings stacked on one job |
+| **MEDIUM** | 4-7 | Several truncate-and-reload writes, or one plus a smaller finding |
+| **HIGH** | >=8 | A hand-rolled SCD2 pattern, a cartesian-risk join, or several findings stacked on one job |
 
-The caps (`min(..., 3)`) keep one very large job from drowning out everything else in the
-same way the Analyzer's own thresholds are bucketed rather than unbounded. Duplicate-logic
-groups that span two or more jobs are also listed separately as **merge candidates** --
-the specific jobs sharing the duplicated logic, and a suggested consolidation.
+The caps (`min(..., n)`) keep one very large job from drowning out everything else in the
+same way the Analyzer's own thresholds are bucketed rather than unbounded; the weights are
+deliberately lower for the general SQL-tuning findings than for the two DataStage-specific
+ones, so a single OR-heavy predicate on an otherwise clean job can't by itself push it into
+HIGH. Duplicate-logic groups that span two or more jobs are also listed separately as
+**merge candidates** -- the specific jobs sharing the duplicated logic, and a suggested
+consolidation.
 
 ```powershell
 lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix optimization_report
@@ -486,19 +507,28 @@ lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix opti
 
 Output: `optimization_report.json` / `.xlsx` with a `Summary`, `Optimization Index`,
 `Truncate-Reload Writes`, `SCD2 Candidates`, `Duplicate Queries`, `Queries Without
-Filters`, and `Merge Candidates` tab. `migrate` and `workflow` run it automatically
-(no extra flag) right after the hierarchy build. This repository's own result, from its
-23 jobs, is checked in at
+Filters`, `Non-Sargable Predicates`, `OR-Heavy Predicates`, `Cartesian-Risk Joins`,
+`Embedded SQL Set Issues`, `Repeated Expr. Within Job`, and `Merge Candidates` tab.
+`migrate` and `workflow` run it automatically (no extra flag) right after the hierarchy
+build. This repository's own result, from its 23 jobs, is checked in at
 [`../analysis/optimization_report.xlsx`](../analysis/optimization_report.xlsx): 7 HIGH /
-12 MEDIUM / 4 LOW, with J06 correctly isolated as the one SCD2 candidate (`migration/README.md`
-§8b has the full breakdown).
+12 MEDIUM / 4 LOW, with J06 correctly isolated as the one SCD2 candidate and J01 as the one
+OR-heavy predicate (`migration/README.md` §8b has the full breakdown). The five
+general-SQL-tuning findings all come back empty on this specific repository -- its 23 jobs
+have no embedded SQL and its filters/joins are hand-built cleanly -- which is itself a
+useful result: those checks ran and found nothing to flag, rather than not having run.
 
 Like the Analyzer's complexity score, this is a heuristic screening tool: every finding
 needs a human to confirm it is worth acting on. Unlike the Analyzer, the rules here are
 regexes over stage/property names and text, not a parsed grammar -- see the module
 docstring in `optimize.py` for why they deliberately avoid `\b` word boundaries on
 DataStage's `Px`-prefixed/underscore-joined identifiers, and tune them for other naming
-conventions before trusting them on a different source.
+conventions before trusting them on a different source. One concrete case found and ruled
+out while building the repeated-derivation check: this repository's J08 computes the same
+`@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1` formula for both `store_sk` and
+`employee_sk` -- textually identical, but two unrelated surrogate-key counters on two
+different links, not the same value computed twice. The check excludes DataStage's
+row-context macros for exactly this reason.
 
 ## Large-export workflow
 

@@ -688,19 +688,29 @@ visibly, every target in this pipeline is a full overwrite (§2.1), and J06's SC
 [`optimize.py`](lakebridge_workflow/src/lakebridge_workflow/optimize.py), exposed as
 `lakebridge-workflow optimize`, is a second, independent scoring pass over the same
 consolidated analyzer JSON that `build-hierarchy` reads (§3). It never changes a
-generated notebook; it only reports. Four heuristics:
+generated notebook; it only reports. Nine heuristics, two specific to DataStage's own
+idioms and seven general SQL/ETL-tuning patterns that apply to any source with embedded
+SQL or hand-built filters/joins:
 
-| Finding | Signal | The Databricks win |
+| Finding | Signal | The win |
 |---|---|---|
 | Truncate-and-reload writes | A target stage's write mode is a full overwrite/truncate/replace (this repo: every `append\overwrite = overwrite` Sequential File target; a generic DB connector: `Table action = Truncate/Replace`) | `MERGE` or Auto CDC instead of rewriting the whole table every run |
 | Hand-rolled SCD2 / change detection | A Join between a new snapshot and the current state, branching by hand into expire/carry/new-version logic | `create_auto_cdc_from_snapshot_flow` -- exactly what §7 already proved out for J06 |
-| Duplicate queries | The same embedded SQL statement, filter predicate, or derivation expression repeated across jobs | Factor into one shared view, macro, or parameterized job |
+| Duplicate queries | The same embedded SQL statement, filter predicate, or derivation expression repeated across *different* jobs | Factor into one shared view, macro, or parameterized job (also a merge candidate) |
 | Filters pushed too late | A join/lookup/aggregation with no filter stage anywhere in the job, or embedded SQL with no `WHERE` | Push the predicate before the expensive stage |
+| Non-sargable predicates | A filter/`WHERE` wraps the compared column in a function (`Upcase(x) = 'Y'`, `UPPER(x)`, a `CAST`, a date truncation, ...) | Compare the raw column so partition pruning / data skipping can use the filter |
+| OR-heavy predicates | Several ORs in one predicate, usually across different columns | Split into separate reads unioned together, or an IN-list, so each branch prunes independently |
+| Cartesian-risk joins | A join stage with no declared key, or embedded SQL with a `JOIN` and no `ON`/`USING` | A silent row-count explosion caught before it becomes a `MERGE`/join on Databricks |
+| Embedded-SQL set-operation issues | `SELECT *`, a wide `SELECT DISTINCT`, `UNION` instead of `UNION ALL`, a subquery inside `WHERE` | Column pruning, a narrower dedup key, one fewer shuffle, or a join instead of a per-row subquery |
+| Repeated derivations within one job | The same non-trivial expression computed more than once inside one job -- excluding DataStage's `@INROWNUM`/`@PARTITIONNUM`/`@NUMPARTITIONS` row-context macros, since two columns using the same row-numbering formula are two independent counters, not the same value twice | Compute it once, reuse it |
 
 Each job gets a weighted **optimization index** score and a HIGH/MEDIUM/LOW band, the
 same shape as the Analyzer's own complexity index (§3), so the two reports read side by
 side: complexity says how hard a job was to migrate, the optimization index says how
-worth re-architecting it is now that it has landed. Duplicate-logic groups spanning two
+worth re-architecting it is now that it has landed. The two DataStage-specific findings
+(SCD2, cartesian-risk joins) carry the most weight; the seven general SQL-tuning findings
+are weighted lower, so one of them alone can't push an otherwise-clean job into HIGH (the
+full formula is in `lakebridge_workflow/README.md`). Duplicate-logic groups spanning two
 or more jobs are also listed separately as **merge candidates** -- the specific jobs
 involved, and a suggested consolidation.
 
@@ -710,10 +720,12 @@ lakebridge-workflow optimize --input-json consolidated_all_jobs.json --out-prefi
 
 Output: `optimization_report.json` / `.xlsx` with `Summary`, `Optimization Index`,
 `Truncate-Reload Writes`, `SCD2 Candidates`, `Duplicate Queries`, `Queries Without
-Filters`, and `Merge Candidates` tabs. `migrate` and `workflow` (§9) run it
-automatically, right after the hierarchy build -- no extra flag. Checked in alongside
-the Analyzer's own report: [`analysis/optimization_report.xlsx`](analysis/optimization_report.xlsx)
-(and `.json`), generated from this repository's own 23 jobs the same way as §3's
+Filters`, `Non-Sargable Predicates`, `OR-Heavy Predicates`, `Cartesian-Risk Joins`,
+`Embedded SQL Set Issues`, `Repeated Expr. Within Job`, and `Merge Candidates` tabs.
+`migrate` and `workflow` (§9) run it automatically, right after the hierarchy build -- no
+extra flag. Checked in alongside the Analyzer's own report:
+[`analysis/optimization_report.xlsx`](analysis/optimization_report.xlsx) (and `.json`),
+generated from this repository's own 23 jobs the same way as §3's
 `analysis/lakebridge-analyzer.xlsx`.
 
 **Result on this repository's own 23 jobs** (`switch_input/`, analyzed offline per §3):
@@ -721,7 +733,7 @@ the Analyzer's own report: [`analysis/optimization_report.xlsx`](analysis/optimi
 | Band | Jobs | Typical reason |
 |---|---|---|
 | HIGH | 7 | J06 (the one genuine SCD2 pattern) plus six fact/dimension jobs combining several truncate-and-reload writes with duplicate filter or derivation logic |
-| MEDIUM | 12 | Truncate-and-reload writes on staging/mart targets, mostly without other findings |
+| MEDIUM | 12 | Truncate-and-reload writes on staging/mart targets, often with one smaller finding (J01's OR-heavy predicate, below) |
 | LOW | 4 | A single truncate-and-reload write and nothing else |
 
 `scd2Candidates` correctly finds exactly one job, J06, and names its evidence
@@ -732,7 +744,22 @@ merge candidates): for example J07/J08/J09 (the three dimension jobs) share a de
 expression, and J10/J11 (fact jobs) share both a derivation and two filter predicates --
 real candidates for a shared macro or parameterized job rather than three/two near-copies.
 `queriesWithoutFilters` flags 9 jobs whose Join/Aggregator has no Filter stage anywhere in
-the job.
+the job. `orHeavyPredicates` finds exactly one hit -- J01's DQ-anomaly filter
+(`unit_price = 0 or quantity > 5000 or quantity < -5000`), two ORs across two columns.
+
+The other four findings (non-sargable predicates, cartesian-risk joins, embedded-SQL
+set-operation issues, repeated derivations within a job) all come back **empty** on this
+repository, and that's a real result, not a gap: every filter predicate here compares a
+raw column, every join declares its key, and there is no embedded SQL to check for
+`SELECT *`/`UNION`/subqueries (this pipeline is 23 native DataStage parallel jobs, not a
+DB-connector-heavy source -- see §8a.4's `jb_*`/`job-32.xml` samples for one that has
+embedded SQL). One case was found and deliberately excluded while building the
+repeated-derivation check: J08 computes
+`@PARTITIONNUM + (@NUMPARTITIONS * (@INROWNUM - 1)) + 1` for both `store_sk` and
+`employee_sk` -- identical text, but two unrelated surrogate-key counters on two different
+links (§2.1, §4 #4), not the same value computed twice. Treating that as duplicate work
+would have been a false positive, so the check ignores DataStage's row-context macros
+specifically to avoid it.
 
 Like the complexity index (§3) and the DQX rule set (§5), this is a heuristic screening
 tool, not a verdict: every finding needs a human to confirm it's worth acting on before
@@ -776,10 +803,11 @@ patterns match as plain substrings instead).
 - **Environment pinning.** Jobs use serverless environment version 5. Version 2 rejects `DataFrame.cache()`.
 - **Cost.** Each Switch run uses about 0.5M tokens on `databricks-claude-sonnet-5-5`.
 - **Optimization report findings are not yet acted on** (§8b). J06's SCD2 pattern is already rebuilt as Auto CDC
-  in the SDP version (§7); the truncate-and-reload and duplicate-logic findings on the other 22 jobs are reported
-  but not yet implemented in any of the three implementations. The embedded-SQL heuristics (duplicate queries,
-  missing `WHERE`) are untested against a source that actually has embedded SQL -- this repository's 23 jobs have
-  none; the `jb_*`/`job-32.xml` samples in §8a.4 do, but were not run back through `optimize`.
+  in the SDP version (§7); the truncate-and-reload, OR-heavy-predicate, and duplicate-logic findings on the other
+  22 jobs are reported but not yet implemented in any of the three implementations. The embedded-SQL-only
+  heuristics (duplicate/non-sargable/cartesian-risk embedded SQL, `SELECT *`/`UNION`/subquery-in-`WHERE`, missing
+  `WHERE`) are untested against a source that actually has embedded SQL -- this repository's 23 jobs have none;
+  the `jb_*`/`job-32.xml` samples in §8a.4 do, but were not run back through `optimize`.
 
 ---
 

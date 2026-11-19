@@ -1,7 +1,7 @@
 {
   "runInfo": {
-    "sourceReport": "/tmp/optcheck/consolidated.json",
-    "builtAt": "2026-11-19T18:59:10Z",
+    "sourceReport": "/tmp/optcheck2/consolidated.json",
+    "builtAt": "2026-11-19T19:18:34Z",
     "sourceTechnology": "Datastage"
   },
   "summary": {
@@ -16,6 +16,11 @@
     "scd2Candidates": 1,
     "duplicateQueryGroups": 7,
     "queriesWithoutFilters": 9,
+    "nonSargablePredicates": 0,
+    "orHeavyPredicates": 1,
+    "cartesianRiskJoins": 0,
+    "embeddedSqlSetIssues": 0,
+    "repeatedExpressionsWithinJob": 0,
     "mergeCandidateGroups": 6
   },
   "optimizationIndex": [
@@ -123,10 +128,11 @@
     {
       "job": "J01_Land_Orders",
       "complexityLevel": "HIGH",
-      "score": 6,
+      "score": 7,
       "band": "MEDIUM",
       "findings": [
-        "4 truncate-and-reload write(s)"
+        "4 truncate-and-reload write(s)",
+        "1 OR-heavy predicate(s)"
       ],
       "duplicateGroupIds": []
     },
@@ -773,8 +779,8 @@
     },
     {
       "kind": "filter_predicate",
-      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0",
-      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0",
+      "normalizedText": "customer_id > 0",
+      "sampleText": "customer_id > 0",
       "jobs": [
         "J17_Mart_Customer_360"
       ],
@@ -782,20 +788,20 @@
         {
           "job": "J17_Mart_Customer_360",
           "stage": "flt_Known_Customers",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0"
+          "text": "customer_id > 0"
         },
         {
           "job": "J17_Mart_Customer_360",
           "stage": "flt_Known_Returns",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)customer_id > 0\\(2)0"
+          "text": "customer_id > 0"
         }
       ],
       "groupId": "DUP-004"
     },
     {
       "kind": "filter_predicate",
-      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0",
-      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0",
+      "normalizedText": "is_cancel = 0 and is_nonproduct = 0 and quantity > 0",
+      "sampleText": "is_cancel = 0 and is_nonproduct = 0 and quantity > 0",
       "jobs": [
         "J10_Fact_Sales",
         "J23_Reconcile_Source_To_Fact"
@@ -804,20 +810,20 @@
         {
           "job": "J10_Fact_Sales",
           "stage": "flt_Sales_Lines",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0"
+          "text": "is_cancel = 0 and is_nonproduct = 0 and quantity > 0"
         },
         {
           "job": "J23_Reconcile_Source_To_Fact",
           "stage": "flt_Sales_Lines",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0"
+          "text": "is_cancel = 0 and is_nonproduct = 0 and quantity > 0"
         }
       ],
       "groupId": "DUP-005"
     },
     {
       "kind": "filter_predicate",
-      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0",
-      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0",
+      "normalizedText": "is_current = 1",
+      "sampleText": "is_current = 1",
       "jobs": [
         "J06_Dim_Customer_SCD2",
         "J11_Fact_Returns",
@@ -828,30 +834,30 @@
         {
           "job": "J06_Dim_Customer_SCD2",
           "stage": "flt_Current_Rows",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+          "text": "is_current = 1"
         },
         {
           "job": "J11_Fact_Returns",
           "stage": "flt_Current_Customer",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+          "text": "is_current = 1"
         },
         {
           "job": "J16_Bonus_Program",
           "stage": "flt_Current_Customer",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+          "text": "is_current = 1"
         },
         {
           "job": "J17_Mart_Customer_360",
           "stage": "flt_Current_Customer",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0"
+          "text": "is_current = 1"
         }
       ],
       "groupId": "DUP-006"
     },
     {
       "kind": "filter_predicate",
-      "normalizedText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0",
-      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0",
+      "normalizedText": "product_sk = -1",
+      "sampleText": "product_sk = -1",
       "jobs": [
         "J10_Fact_Sales",
         "J22_DQ_Fact_Checks"
@@ -860,12 +866,12 @@
         {
           "job": "J10_Fact_Sales",
           "stage": "flt_Orphan_Product",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0"
+          "text": "product_sk = -1"
         },
         {
           "job": "J22_DQ_Fact_Checks",
           "stage": "flt_orphan_product_lines",
-          "text": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0"
+          "text": "product_sk = -1"
         }
       ],
       "groupId": "DUP-007"
@@ -951,6 +957,20 @@
       "note": "Join/lookup/aggregation with no filter stage anywhere in the job; a full-table read reaches the expensive stage."
     }
   ],
+  "nonSargablePredicates": [],
+  "orHeavyPredicates": [
+    {
+      "job": "J01_Land_Orders",
+      "stage": "flt_Anomalies",
+      "kind": "filter_predicate",
+      "orCount": 2,
+      "predicate": "unit_price = 0 or quantity > 5000 or quantity < -5000",
+      "note": "2 ORs in one predicate; consider separate reads unioned together, or an IN-list, so each branch can prune independently."
+    }
+  ],
+  "cartesianRiskJoins": [],
+  "embeddedSqlSetIssues": [],
+  "repeatedExpressionsWithinJob": [],
   "mergeCandidates": [
     {
       "groupId": "DUP-001",
@@ -994,7 +1014,7 @@
         "J23_Reconcile_Source_To_Fact"
       ],
       "occurrenceCount": 2,
-      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_cancel = 0 and is_nonproduct = 0 and quantity > 0\\(2)0",
+      "sampleText": "is_cancel = 0 and is_nonproduct = 0 and quantity > 0",
       "suggestion": "Identical filter predicate reused across jobs; factor it into a shared view or macro instead of repeating it per job."
     },
     {
@@ -1007,7 +1027,7 @@
         "J17_Mart_Customer_360"
       ],
       "occurrenceCount": 4,
-      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)is_current = 1\\(2)0",
+      "sampleText": "is_current = 1",
       "suggestion": "Identical filter predicate reused across jobs; factor it into a shared view or macro instead of repeating it per job."
     },
     {
@@ -1018,7 +1038,7 @@
         "J22_DQ_Fact_Checks"
       ],
       "occurrenceCount": 2,
-      "sampleText": "\\(2)\\(2)0\\(1)\\(3)where\\(2)product_sk = -1\\(2)0",
+      "sampleText": "product_sk = -1",
       "suggestion": "Identical filter predicate reused across jobs; factor it into a shared view or macro instead of repeating it per job."
     }
   ]
