@@ -729,7 +729,7 @@ wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
 # Transpiler workers default to one per selected job; a lower explicit count distributes jobs.
 # See migration/lakebridge_workflow/README.md for prerequisites, optional flags, and defaults.
 # databricks-bb-analyzer is installed in the uv environment; the BladeBridge plugin is only
-# needed for the separate run-dbxconv command and is not installed by this package.
+# needed for optional dbxconv conversion and is not installed by this package.
 uv run --with "$wheel" \
   lakebridge-workflow migrate \
   --source <DSExport-or-condensed-source> \
@@ -741,7 +741,10 @@ uv run --with "$wheel" \
   --state-file <state-file> \
   --output-root <batch-output-root> \
   --reset-history \
-  --overwrite
+  --overwrite \
+  --run-dbxconv \
+  --dbxconv-plugin-dir <bb-plugin-dir> \
+  --dbxconv-target <PYSPARK|SPARKSQL|DBSQL>
 
 # Shortcut for the current condensed-job checkout.
 uv run --with "$wheel" \

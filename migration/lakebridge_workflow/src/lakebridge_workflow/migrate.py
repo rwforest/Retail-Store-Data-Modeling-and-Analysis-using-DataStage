@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Run the complete Lakebridge migration workflow from a DSExport or condensed jobs."""
+"""Run the complete Lakebridge migration workflow from a DSExport or condensed jobs.
+
+The deterministic path always runs through assessment, hierarchy, planning, and transpilation.
+Offline BladeBridge conversion is an optional final phase enabled with ``--run-dbxconv``.
+"""
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 from pathlib import Path
 
@@ -12,6 +17,7 @@ from . import (
     build_hierarchy,
     merge_reports,
     plan_migration_batch,
+    run_dbxconv,
     split_datastage_xml,
     transpile_batch,
 )
@@ -21,7 +27,7 @@ from .paths import find_migration_root
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     root = find_migration_root()
     p = argparse.ArgumentParser(
-        description="Run split, parallel analysis, merge, hierarchy, planning, and transpilation end to end",
+        description="Run split, parallel analysis, merge, hierarchy, planning, transpilation, and optional BladeBridge conversion end to end",
     )
     p.add_argument("--source", type=Path, required=True,
                    help="Required: large DSExport XML/TXT file or condensed-job directory")
@@ -59,6 +65,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--no-xml", action="store_true",
                    help="Optional: do not create standalone XML copies; notebooks are still "
                         "generated (default: false)")
+    p.add_argument("--run-dbxconv", action="store_true",
+                   help="Optional: run offline BladeBridge conversion after deterministic "
+                        "transpilation (default: false)")
+    p.add_argument("--dbxconv-plugin-dir", type=Path, default=Path("bb_plugin"),
+                   help="Optional: manually unpacked databricks_bb_plugin wheel root; required "
+                        "when --run-dbxconv is used (default: bb_plugin)")
+    p.add_argument("--dbxconv-target", choices=("PYSPARK", "SPARKSQL", "DBSQL"),
+                   default="PYSPARK",
+                   help="Optional: BladeBridge conversion target (default: PYSPARK)")
+    p.add_argument("--dbxconv-output-dir", type=Path,
+                   help="Optional: BladeBridge output directory; defaults to "
+                        "<batch-dir>/bladebridge_<target>")
     args = p.parse_args(argv)
 
     if args.num_jobs <= 0:
@@ -69,6 +87,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         p.error("--workers must be zero or positive")
     if args.transpile_workers is not None and args.transpile_workers < 0:
         p.error("--transpile-workers must be zero or positive")
+    if args.run_dbxconv and args.no_xml:
+        p.error("--run-dbxconv requires standalone XML; remove --no-xml")
+    if args.run_dbxconv and not args.dbxconv_plugin_dir.is_dir():
+        p.error(f"--dbxconv-plugin-dir does not exist: {args.dbxconv_plugin_dir}")
     return args
 
 
@@ -177,6 +199,31 @@ def run_condensed_analysis(args: argparse.Namespace) -> Path:
     return report_prefix.with_suffix(".json")
 
 
+def run_bladebridge_phase(args: argparse.Namespace) -> Path:
+    """Run optional offline BladeBridge conversion against the latest generated batch."""
+    try:
+        state = json.loads(args.state_file.read_text(encoding="utf-8"))
+        batch_id = int(state["batches"][-1]["batch_id"])
+    except (OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+        raise SystemExit(f"error: cannot identify latest batch for BladeBridge: {exc}") from exc
+
+    batch_dir = args.output_root / f"batch_{batch_id:03d}"
+    xml_dir = batch_dir / "xml"
+    if not xml_dir.is_dir() or not list(xml_dir.glob("*.xml")):
+        raise SystemExit(f"error: no standalone XML files found for BladeBridge: {xml_dir}")
+
+    output_dir = args.dbxconv_output_dir or batch_dir / f"bladebridge_{args.dbxconv_target.lower()}"
+    rc = run_dbxconv.main([
+        "--plugin-dir", str(args.dbxconv_plugin_dir),
+        "--target", args.dbxconv_target,
+        str(xml_dir),
+        str(output_dir),
+    ])
+    if rc:
+        raise SystemExit(f"error: BladeBridge conversion failed with exit code {rc}")
+    return output_dir
+
+
 def run(args: argparse.Namespace) -> int:
     if not args.source.exists():
         raise SystemExit(f"error: source not found: {args.source}")
@@ -232,7 +279,13 @@ def run(args: argparse.Namespace) -> int:
     if rc:
         return rc
 
-    print("Phase 5/5: migration state update", flush=True)
+    if args.run_dbxconv:
+        print("Phase 5/6: optional BladeBridge conversion", flush=True)
+        bladebridge_dir = run_bladebridge_phase(args)
+        print(f"  BladeBridge output: {bladebridge_dir}", flush=True)
+        print("Phase 6/6: migration state update", flush=True)
+    else:
+        print("Phase 5/5: migration state update", flush=True)
     # transpile_batch updates migration_state atomically.
     print("Migration workflow complete", flush=True)
     return 0

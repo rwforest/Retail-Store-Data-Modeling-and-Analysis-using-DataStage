@@ -50,7 +50,7 @@ flowchart TD
     Q --> S
     R --> S
 
-    Q --> T["run-dbxconv<br/>optional offline BladeBridge conversion"]
+    Q --> T["run-dbxconv / migrate --run-dbxconv<br/>optional offline BladeBridge conversion"]
     T --> U["BladeBridge notebooks or SQL"]
 
     R --> V["Deploy and run<br/>optional"]
@@ -145,7 +145,7 @@ The package separates the Python Analyzer command from the native BladeBridge co
 |---|---|---|---|
 | Lakebridge workflow package | Built and installed from `dist/*.whl` | All commands | `lakebridge-workflow` |
 | `databricks-bb-analyzer` | Installed into the same `uv`/Python environment | Official analysis of XML `DSExport` chunks | Console command `databricks-bb-analyzer` on `PATH`, or `--external-command` |
-| `databricks-bb-plugin` | Manually downloaded and unpacked | Optional offline `dbxconv` conversion | Extracted plugin folder passed to `run-dbxconv --plugin-dir` |
+| `databricks-bb-plugin` | Manually downloaded and unpacked | Optional offline `dbxconv` conversion | Extracted plugin folder passed to `run-dbxconv --plugin-dir`, or `migrate --run-dbxconv --dbxconv-plugin-dir` |
 
 ### Analyzer prerequisite
 
@@ -169,8 +169,9 @@ The workflow discovers `databricks-bb-analyzer` on `PATH`. For a nonstandard lau
 
 ### BladeBridge plugin prerequisite
 
-The BladeBridge plugin is **not installed automatically** by this package. It is not needed
-by `migrate`; it is needed only when you separately run offline `dbxconv` conversion.
+The BladeBridge plugin is **not installed automatically** by this package. It is needed only
+when you run offline `dbxconv` conversion, either separately through `run-dbxconv` or through
+`migrate --run-dbxconv`.
 
 The plugin wheel contains a native `dbxconv` binary and its converter configuration tree.
 Unpack it once into a local folder, for example:
@@ -194,8 +195,9 @@ uv run --python 3.12 `
 BladeBridge's native runtime supports Python 3.10–3.14; Python 3.12 is the recommended
 offline runner.
 
-`migrate` does **not** invoke `dbxconv`, so it has no plugin-folder flag. The plugin folder is
-used only by the separate `run-dbxconv` command.
+By default, `migrate` stops after deterministic transpilation and does **not** invoke
+`dbxconv`. Supply `--run-dbxconv` to extend the same command through offline BladeBridge
+conversion.
 
 ## One-command migration workflow
 
@@ -208,6 +210,7 @@ condensed-job directory. For a `DSExport`, the command automatically:
 4. Builds the job hierarchy
 5. Plans a closed-lineage batch
 6. Transpiles the batch in parallel
+7. Optionally runs offline BladeBridge conversion when `--run-dbxconv` is supplied
 
 ### Required flags
 
@@ -240,6 +243,10 @@ lakebridge-workflow migrate `
 | `--overwrite` | `false` | Replace an existing batch output directory |
 | `--plan-only` | `false` | Stop after the dry-run batch plan |
 | `--no-xml` | `false` | Skip standalone XML copies; notebooks are still generated |
+| `--run-dbxconv` | `false` | Run offline BladeBridge conversion after deterministic transpilation |
+| `--dbxconv-plugin-dir` | `bb_plugin` | Manually unpacked `databricks_bb_plugin` wheel root; used only with `--run-dbxconv` |
+| `--dbxconv-target` | `PYSPARK` | BladeBridge target: `PYSPARK`, `SPARKSQL`, or `DBSQL` |
+| `--dbxconv-output-dir` | `<batch-dir>/bladebridge_<target>` | BladeBridge output directory; used only with `--run-dbxconv` |
 
 Common path, chunking, worker, and analyzer overrides are:
 
@@ -268,6 +275,12 @@ Behavior flags are used individually, according to the run mode:
 
 # Generate notebooks and workflow but skip standalone XML copies.
 --no-xml
+
+# Also run offline BladeBridge conversion after deterministic transpilation.
+--run-dbxconv `
+--dbxconv-plugin-dir <bb-plugin-dir> `
+--dbxconv-target <PYSPARK|SPARKSQL|DBSQL> `
+--dbxconv-output-dir <bladebridge-output-dir>
 ```
 
 If an official analyzer is not on `PATH`, pass its launcher through
