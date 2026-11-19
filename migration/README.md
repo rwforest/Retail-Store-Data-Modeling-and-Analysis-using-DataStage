@@ -724,7 +724,8 @@ cd migration/lakebridge_workflow && uv build --wheel --out-dir dist && cd ..
 wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
 
 # Complete workflow from either a DSExport or a condensed-job directory.
-# Default chunk size: 500 jobs per XML chunk.
+# Only --source and --num-jobs are required. Default chunk size: 500 jobs per XML chunk.
+# See migration/lakebridge_workflow/README.md for every optional flag and default.
 uv run --with "$wheel" \
   lakebridge-workflow migrate \
   --source <DSExport-or-condensed-source> \

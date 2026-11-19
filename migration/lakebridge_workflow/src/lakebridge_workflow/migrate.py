@@ -22,29 +22,38 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     root = find_migration_root()
     p = argparse.ArgumentParser(
         description="Run split, parallel analysis, merge, hierarchy, planning, and transpilation end to end",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--source", type=Path, required=True,
-                   help="Large DSExport XML/TXT file or condensed-job directory")
+                   help="Required: large DSExport XML/TXT file or condensed-job directory")
     p.add_argument("--num-jobs", type=int, required=True,
-                   help="Target number of new migration items")
+                   help="Required: target number of new migration items")
     p.add_argument("--jobs-per-file", type=int, default=500,
-                   help="Jobs per XML chunk when splitting a DSExport")
+                   help="Optional: jobs per XML chunk when splitting a DSExport (default: 500)")
     p.add_argument("--workers", type=int, default=0,
-                   help="Analyzer worker processes (0 = automatically use available CPUs)")
+                   help="Optional: analyzer worker processes; 0 means automatic (default: 0)")
     p.add_argument("--transpile-workers", type=int, default=0,
-                   help="Transpiler worker processes (0 = automatically use available CPUs)")
+                   help="Optional: transpiler worker processes; 0 means automatic (default: 0)")
     p.add_argument("--analysis-dir", type=Path, default=root / "lakebridge_workflow_analysis",
-                   help="Directory for chunks, reports, merged report, and hierarchy")
-    p.add_argument("--state-file", type=Path, default=root / "migration_state.json")
-    p.add_argument("--output-root", type=Path, default=root / "migrated_batches")
-    p.add_argument("--filter")
+                   help="Optional: directory for chunks, reports, merged report, and hierarchy "
+                        "(default: <migration-root>/lakebridge_workflow_analysis)")
+    p.add_argument("--state-file", type=Path, default=root / "migration_state.json",
+                   help="Optional: migration history JSON file (default: <migration-root>/migration_state.json)")
+    p.add_argument("--output-root", type=Path, default=root / "migrated_batches",
+                   help="Optional: batch output root (default: <migration-root>/migrated_batches)")
+    p.add_argument("--filter",
+                   help="Optional: root name or folder substring filter (default: no filter)")
     p.add_argument("--external-command",
-                   help="Official analyzer command with {source}, {report}, and {json} placeholders")
-    p.add_argument("--reset-history", action="store_true")
-    p.add_argument("--overwrite", action="store_true", help="Replace an existing batch output directory")
-    p.add_argument("--plan-only", action="store_true", help="Stop after the dry-run batch plan")
-    p.add_argument("--no-xml", action="store_true", help="Do not create standalone XML copies")
+                   help="Optional: official analyzer command with {source}, {report}, and {json} "
+                        "placeholders (default: discover databricks-bb-analyzer on PATH)")
+    p.add_argument("--reset-history", action="store_true",
+                   help="Optional: start from an empty migration state (default: false)")
+    p.add_argument("--overwrite", action="store_true",
+                   help="Optional: replace an existing batch output directory (default: false)")
+    p.add_argument("--plan-only", action="store_true",
+                   help="Optional: stop after the dry-run batch plan (default: false)")
+    p.add_argument("--no-xml", action="store_true",
+                   help="Optional: do not create standalone XML copies; notebooks are still "
+                        "generated (default: false)")
     args = p.parse_args(argv)
 
     if args.num_jobs <= 0:

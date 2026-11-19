@@ -149,8 +149,39 @@ condensed-job directory. For a `DSExport`, the command automatically:
 5. Plans a closed-lineage batch
 6. Transpiles the batch in parallel
 
-The default chunk size is `500` jobs per XML chunk. Override it with
-`--jobs-per-file <jobs-per-chunk>`.
+### Required flags
+
+| Flag | Value |
+|---|---|
+| `--source` | Large `DSExport` XML/TXT file or condensed-job directory |
+| `--num-jobs` | Target number of new migration items |
+
+The minimal command is:
+
+```powershell
+lakebridge-workflow migrate `
+  --source <DSExport-or-condensed-source> `
+  --num-jobs <target-new-items>
+```
+
+### Optional flags and defaults
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--jobs-per-file` | `500` | Jobs per XML chunk when splitting a `DSExport` |
+| `--workers` | `0` | Analyzer worker processes; `0` means automatic, bounded by available CPUs and chunk count |
+| `--transpile-workers` | `0` | Transpiler worker processes; `0` means automatic, bounded by available CPUs and selected-job count |
+| `--analysis-dir` | `<migration-root>/lakebridge_workflow_analysis` | Directory for chunks, worker reports, merged report, and hierarchy |
+| `--state-file` | `<migration-root>/migration_state.json` | Migration history file |
+| `--output-root` | `<migration-root>/migrated_batches` | Root directory for generated batches |
+| `--filter` | No filter | Optional root-name or folder substring filter |
+| `--external-command` | Discover `databricks-bb-analyzer` on `PATH` | Official analyzer command with `{source}`, `{report}`, and `{json}` placeholders |
+| `--reset-history` | `false` | Start from an empty migration state |
+| `--overwrite` | `false` | Replace an existing batch output directory |
+| `--plan-only` | `false` | Stop after the dry-run batch plan |
+| `--no-xml` | `false` | Skip standalone XML copies; notebooks are still generated |
+
+Common path, chunking, worker, and analyzer overrides are:
 
 ```powershell
 lakebridge-workflow migrate `
@@ -162,8 +193,21 @@ lakebridge-workflow migrate `
   --analysis-dir <analysis-dir> `
   --state-file <state-file> `
   --output-root <batch-output-root> `
-  --reset-history `
-  --overwrite
+  --filter <root-or-folder-filter> `
+  --external-command "<analyzer-command-with-placeholders>"
+```
+
+Behavior flags are used individually, according to the run mode:
+
+```powershell
+# Preview assessment, hierarchy, and the closed-lineage plan without transpiling.
+--plan-only
+
+# Start a fresh migration history and replace an existing batch directory.
+--reset-history --overwrite
+
+# Generate notebooks and workflow but skip standalone XML copies.
+--no-xml
 ```
 
 If an official analyzer is not on `PATH`, pass its launcher through
