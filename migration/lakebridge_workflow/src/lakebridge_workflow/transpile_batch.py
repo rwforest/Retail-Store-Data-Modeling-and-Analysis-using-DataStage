@@ -2,22 +2,28 @@
 """Transpile one planned, closed-lineage batch using the repository's deterministic compiler.
 
 For each new parallel job this script uses ``ds2spark.Compiler`` (the same compiler as the
-checked-in reference notebooks). For each root sequence it emits a Databricks Asset Bundle
-and Lakeflow workflow. Jobs already present in ``migration_state.json`` are not recompiled;
-the workflow points to their earlier notebook path. If the source DSX files are available,
-standalone XML files are also emitted for optional offline BladeBridge conversion.
+checked-in reference notebooks). Notebook compilation, Switch-spec copying, and standalone
+XML generation run in an isolated process pool. Planning, workflow generation, and migration
+state updates remain single-writer operations so history and manifests stay deterministic.
+Jobs already present in ``migration_state.json`` are not recompiled; the workflow points to
+their earlier notebook path. If source DSX files are available, standalone XML files are
+also emitted for optional offline BladeBridge conversion.
 
-Current repository example::
+Example::
 
-    lakebridge-workflow transpile --num-jobs 12 --reset-history
+    lakebridge-workflow transpile --num-jobs <target-new-items> --workers <worker-count>
 """
 from __future__ import annotations
 
 import argparse
 import importlib.util
 import json
+import os
 import shutil
 import sys
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -56,12 +62,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--switch-input-dir", type=Path, default=MIGRATION_ROOT / "switch_input")
     p.add_argument("--source-dsx-dir", type=Path, default=REPO / "DataStage Jobs" / "Pipeline")
     p.add_argument("--no-xml", action="store_true", help="Do not create standalone XML copies")
+    p.add_argument("--workers", type=int, default=0, metavar="N",
+                   help="Transpiler worker processes (0 = automatically use available CPUs)")
     p.add_argument("--overwrite", action="store_true", help="Replace an existing batch directory")
     args = p.parse_args(argv)
     if args.num_jobs is None:
         p.error("--num-jobs is required")
     if args.num_jobs <= 0:
         p.error("--num-jobs must be positive")
+    if args.workers < 0:
+        p.error("--workers must be zero or positive")
     return args
 
 
@@ -112,6 +122,82 @@ def copy_support_notebooks(notebook_dir: Path) -> int:
             shutil.copy2(source, notebook_dir / name)
             copied += 1
     return copied
+
+
+@dataclass(frozen=True)
+class TranspileTask:
+    """One independently writable job artifact set.
+
+    ProcessPoolExecutor tasks must be picklable. The pipeline Job model is a plain object
+    graph and serializes successfully; workers compile it without sharing mutable state with
+    the parent process.
+    """
+
+    name: str
+    job: Any | None
+    notebook_dir: Path
+    switch_source_dir: Path
+    switch_dir: Path
+    xml_dir: Path
+    source_dsx_dir: Path
+    create_notebook: bool
+    create_xml: bool
+
+
+def transpile_worker(task: TranspileTask) -> dict[str, Any]:
+    """Compile one job and create its Switch/XML artifacts in an isolated process."""
+    started = time.perf_counter()
+    result = {
+        "name": task.name,
+        "notebook": False,
+        "switch_spec": False,
+        "xml": False,
+    }
+
+    if task.create_notebook:
+        if task.job is None:
+            raise RuntimeError(f"selected parallel job has no pipeline model: {task.name}")
+        write_notebook(task.job, task.notebook_dir)
+        result["notebook"] = True
+
+    result["switch_spec"] = copy_switch_spec(task.name, task.switch_source_dir, task.switch_dir)
+    if task.create_xml:
+        result["xml"] = create_xml(task.name, task.source_dsx_dir, task.xml_dir) is not None
+
+    result["elapsed_seconds"] = round(time.perf_counter() - started, 4)
+    return result
+
+
+def run_parallel_transpile(tasks: list[TranspileTask], requested_workers: int) -> list[dict[str, Any]]:
+    """Run independent job artifact tasks in a process pool.
+
+    ``requested_workers == 0`` selects an automatic count bounded by both available CPUs and
+    the number of tasks. The pool is closed before returning, so no worker can mutate batch
+    state or workflow YAML after the single-writer phase begins.
+    """
+    if not tasks:
+        return []
+    cpu_count = os.cpu_count() or 1
+    worker_count = requested_workers or min(cpu_count, len(tasks))
+    worker_count = max(1, min(worker_count, len(tasks)))
+    print(f"Transpiling {len(tasks)} item(s) with {worker_count} worker process(es)", flush=True)
+
+    results: list[dict[str, Any]] = []
+    with ProcessPoolExecutor(max_workers=worker_count) as pool:
+        futures = {pool.submit(transpile_worker, task): task.name for task in tasks}
+        try:
+            for future in as_completed(futures):
+                result = future.result()
+                results.append(result)
+                artifact_types = [k for k in ("notebook", "switch_spec", "xml") if result.get(k)]
+                print(f"  {result['name']:<40} {', '.join(artifact_types) or 'no artifacts'} "
+                      f"({result['elapsed_seconds']:.3f}s)", flush=True)
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            pool.shutdown(wait=True, cancel_futures=True)
+            raise
+    return results
 
 
 def reused_notebook_path(state: dict[str, Any], name: str) -> str:
@@ -260,36 +346,47 @@ def run(args: argparse.Namespace) -> int:
     resources.mkdir(parents=True)
 
     pipeline_jobs = {j.name: j for j in pipeline.build_all()}
-    new_names = {j["name"] for j in manifest["new_jobs_in_bottom_up_order"] if j["action"] == "MIGRATE_NOTEBOOK"}
-    all_names = {j["name"] for j in manifest["new_jobs_in_bottom_up_order"]} | {
-        j["name"] for j in manifest["reused_jobs_from_history"]
+    new_jobs = [job for job in manifest["new_jobs_in_bottom_up_order"]]
+    new_names = {job["name"] for job in new_jobs if job["action"] == "MIGRATE_NOTEBOOK"}
+    all_names = {job["name"] for job in new_jobs} | {
+        job["name"] for job in manifest["reused_jobs_from_history"]
     }
 
-    compiled = 0
-    for name in sorted(new_names):
-        if name not in pipeline_jobs:
-            raise SystemExit(f"error: selected parallel job has no pipeline_def model: {name}")
-        write_notebook(pipeline_jobs[name], notebooks)
-        compiled += 1
+    # Create shared directories before workers start. Every worker then writes only to
+    # uniquely named files, avoiding directory-creation races and shared temporary state.
+    xml_dir.mkdir(parents=True, exist_ok=True)
     copied_support = copy_support_notebooks(notebooks)
 
-    # Switch specs are inputs for newly transpiled jobs only. Reused history jobs are
-    # deliberately not copied again; the workflow references their earlier artifacts.
-    new_item_names = {job["name"] for job in manifest["new_jobs_in_bottom_up_order"]}
-    specs = 0
-    for name in sorted(new_item_names):
-        specs += int(copy_switch_spec(name, args.switch_input_dir, switch_dir))
+    # Each newly migrated item owns one task. Parallel jobs compile a notebook; sequence
+    # orchestrators generate only their Switch spec and optional standalone XML. Reused
+    # history jobs are deliberately omitted; the workflow references their prior artifacts.
+    transpile_tasks: list[TranspileTask] = []
+    for job in new_jobs:
+        name = job["name"]
+        create_notebook = job["action"] == "MIGRATE_NOTEBOOK"
+        if create_notebook and name not in pipeline_jobs:
+            raise SystemExit(f"error: selected parallel job has no pipeline_def model: {name}")
+        transpile_tasks.append(TranspileTask(
+            name=name,
+            job=pipeline_jobs.get(name) if create_notebook else None,
+            notebook_dir=notebooks,
+            switch_source_dir=args.switch_input_dir,
+            switch_dir=switch_dir,
+            xml_dir=xml_dir,
+            source_dsx_dir=args.source_dsx_dir,
+            create_notebook=create_notebook,
+            create_xml=not args.no_xml,
+        ))
 
-    xml_count = 0
-    if not args.no_xml:
-        for name in sorted(new_names):
-            if create_xml(name, args.source_dsx_dir, xml_dir) is not None:
-                xml_count += 1
-        sequence_names = [j["name"] for j in manifest["new_jobs_in_bottom_up_order"]
-                          if j["action"] == "MIGRATE_ORCHESTRATION"]
-        for name in sequence_names:
-            if create_xml(name, args.source_dsx_dir, xml_dir) is not None:
-                xml_count += 1
+    try:
+        results = run_parallel_transpile(transpile_tasks, args.workers)
+    except Exception as exc:
+        shutil.rmtree(batch_dir, ignore_errors=True)
+        raise SystemExit(f"error: parallel transpilation failed: {exc}") from exc
+
+    compiled = sum(bool(result.get("notebook")) for result in results)
+    specs = sum(bool(result.get("switch_spec")) for result in results)
+    xml_count = sum(bool(result.get("xml")) for result in results)
 
     root_names = list(manifest["selected_root_sequences"])
     (bundle / "databricks.yml").write_text(databricks_yaml(batch_id), encoding="utf-8")

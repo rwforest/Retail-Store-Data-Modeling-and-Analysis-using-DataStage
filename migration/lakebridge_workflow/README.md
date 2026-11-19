@@ -35,7 +35,7 @@ flowchart TD
     J --> K["plan_migration_batch.py<br/>closed-lineage and history-aware planning"]
     K --> L{"Job already migrated?"}
 
-    L -->|"No"| M["transpile_batch.py"]
+    L -->|"No"| M["transpile_batch.py<br/>parallel process pool"]
     L -->|"Yes"| N["Reuse prior artifact"]
 
     M --> O["PySpark/Spark SQL notebooks"]
@@ -156,6 +156,7 @@ uv run `
   --with $wheel.FullName `
   lakebridge-workflow workflow `
   --num-jobs <target-new-items> `
+  --transpile-workers <transpiler-worker-count> `
   --reset-history `
   --overwrite
 ```
@@ -169,6 +170,12 @@ lakebridge-workflow workflow --plan-only
 A selected root sequence is always migrated with its full descendant closure. If the first
 root closure is larger than `<target-new-items>`, the planner keeps the complete tree instead
 of cutting it in half.
+
+Parallel transpilation is controlled with `<transpiler-worker-count>`. Use `0` to select an
+automatic count bounded by available CPUs and the number of selected jobs. Each worker
+process independently compiles one job's notebook, copies its Switch specification, and
+creates its standalone XML. Workflow generation and migration-state updates remain
+single-writer operations.
 
 The generated batch directory contains artifacts derived from the selected lineage:
 
@@ -189,7 +196,11 @@ lakebridge-workflow analyze --list-tech
 lakebridge-workflow analyze --source-directory <condensed-or-xml-source> --report-file <report-prefix>.xlsx --source-tech Datastage --generate-json
 lakebridge-workflow build-hierarchy --input-json <report-prefix>.json --out-prefix <hierarchy-prefix>
 lakebridge-workflow plan --num-jobs <target-new-items> --dry-run
-lakebridge-workflow transpile --num-jobs <target-new-items> --reset-history --overwrite
+lakebridge-workflow transpile `
+  --num-jobs <target-new-items> `
+  --workers <transpiler-worker-count> `
+  --reset-history `
+  --overwrite
 lakebridge-workflow plan --status
 ```
 

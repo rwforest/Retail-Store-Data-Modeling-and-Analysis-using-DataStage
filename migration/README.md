@@ -723,7 +723,11 @@ python3 migration/build_bundle.py                                          # job
 cd migration/lakebridge_workflow && uv build --wheel --out-dir dist && cd ..
 wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
 uv run --with "$wheel" \
-  lakebridge-workflow workflow --num-jobs <target-new-items> --reset-history --overwrite
+  lakebridge-workflow workflow \
+  --num-jobs <target-new-items> \
+  --transpile-workers <transpiler-worker-count> \
+  --reset-history \
+  --overwrite
 python3 migration/dsx_condense.py "DataStage Jobs/Pipeline" migration/switch_input
 python3 migration/switch_prompt/build_prompt.py                            # Switch prompt (few-shots from compiled)
 
