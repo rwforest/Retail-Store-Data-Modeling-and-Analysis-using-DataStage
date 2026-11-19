@@ -169,7 +169,7 @@ lakebridge-workflow migrate `
 | Flag | Default | Purpose |
 |---|---|---|
 | `--jobs-per-file` | `500` | Jobs per XML chunk when splitting a `DSExport` |
-| `--workers` | `0` | Analyzer worker processes; `0` means automatic, bounded by available CPUs and chunk count |
+| `--workers` | Omitted; one worker per XML chunk | Analyzer workers. A lower explicit count distributes chunks across those workers |
 | `--transpile-workers` | `0` | Transpiler worker processes; `0` means automatic, bounded by available CPUs and selected-job count |
 | `--analysis-dir` | `<migration-root>/lakebridge_workflow_analysis` | Directory for chunks, worker reports, merged report, and hierarchy |
 | `--state-file` | `<migration-root>/migration_state.json` | Migration history file |
@@ -332,7 +332,7 @@ lakebridge-workflow split <export-file> `
   --skip-table-defs
 ```
 
-Analyze chunks with isolated workers:
+Analyze chunks with isolated workers. By default, the runner uses one worker per XML chunk. If a lower explicit worker count is supplied, chunks are distributed across those workers:
 
 ```powershell
 lakebridge-workflow analyze-parallel `

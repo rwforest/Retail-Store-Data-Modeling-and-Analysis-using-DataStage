@@ -29,8 +29,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Required: target number of new migration items")
     p.add_argument("--jobs-per-file", type=int, default=500,
                    help="Optional: jobs per XML chunk when splitting a DSExport (default: 500)")
-    p.add_argument("--workers", type=int, default=0,
-                   help="Optional: analyzer worker processes; 0 means automatic (default: 0)")
+    p.add_argument("--workers", type=int, default=None,
+                   help="Optional: analyzer workers; omitted uses one per XML chunk. A lower "
+                        "explicit count distributes chunks across workers "
+                        "(default: one per XML chunk)")
     p.add_argument("--transpile-workers", type=int, default=0,
                    help="Optional: transpiler worker processes; 0 means automatic (default: 0)")
     p.add_argument("--analysis-dir", type=Path, default=root / "lakebridge_workflow_analysis",
@@ -60,7 +62,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         p.error("--num-jobs must be positive")
     if args.jobs_per_file <= 0:
         p.error("--jobs-per-file must be positive")
-    if args.workers < 0:
+    if args.workers is not None and args.workers < 0:
         p.error("--workers must be zero or positive")
     if args.transpile_workers < 0:
         p.error("--transpile-workers must be zero or positive")
@@ -109,9 +111,10 @@ def run_dsexport_analysis(args: argparse.Namespace) -> Path:
     ])
 
     analyzer_args = [
-        "--workers", str(args.workers),
         "--generate-json",
     ]
+    if args.workers is not None:
+        analyzer_args += ["--workers", str(args.workers)]
     if args.external_command:
         analyzer_args += ["--external-command", args.external_command]
 

@@ -34,7 +34,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Directory of XML chunks, or directory of condensed .txt jobs")
     p.add_argument("--out-dir", required=True, type=Path, help="Root output directory")
     p.add_argument("--merge-prefix", type=Path, help="Merged report prefix (default: <out-dir>/consolidated)")
-    p.add_argument("--workers", type=int, default=0, help="Analyzer worker processes (0 = automatically use available CPUs)")
+    p.add_argument("--workers", type=int, default=None,
+                   help="Analyzer workers; omitted uses one per XML chunk or condensed worker "
+                        "group. A lower explicit count distributes chunks across workers")
     p.add_argument("--jobs-per-worker", type=int, default=4,
                    help="Condensed jobs grouped per local worker (ignored for XML chunks)")
     p.add_argument("--generate-json", action="store_true", help="Generate chunk and merged JSON reports")
@@ -108,7 +110,7 @@ def external_worker(index: int, source: Path, out_dir: Path, command: str | None
 
 
 def run(args: argparse.Namespace) -> int:
-    if args.workers < 0:
+    if args.workers is not None and args.workers < 0:
         raise SystemExit("error: --workers must be zero or positive")
     if args.jobs_per_worker <= 0:
         raise SystemExit("error: --jobs-per-worker must be positive")
@@ -123,8 +125,10 @@ def run(args: argparse.Namespace) -> int:
     if is_xml:
         # analyze.py discovers databricks-bb-analyzer on PATH; --external-command remains
         # available for installations that expose a different launcher or binary path.
-        worker_count = args.workers or min(os.cpu_count() or 1, len(files))
+        worker_count = min(args.workers or len(files), len(files))
         print(f"Running {len(files)} official analyzer chunk(s) across {worker_count} worker(s)")
+        if worker_count < len(files):
+            print(f"Distributing {len(files)} chunk(s) across {worker_count} analyzer worker(s)")
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="analyzer") as pool:
             futures = {pool.submit(external_worker, i, source, args.out_dir, args.external_command): i
                        for i, source in enumerate(files, 1)}
@@ -152,8 +156,10 @@ def run(args: argparse.Namespace) -> int:
     # merge_reports.py deduplicates the repeated sequence inventory later.
     if parallel_files:
         groups = [group + sequence_files for group in groups]
-    worker_count = args.workers or min(os.cpu_count() or 1, len(groups))
+    worker_count = min(args.workers or len(groups), len(groups))
     print(f"Running {len(groups)} local worker chunk(s) across {worker_count} thread(s)")
+    if worker_count < len(groups):
+        print(f"Distributing {len(groups)} group(s) across {worker_count} local worker(s)")
     with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="analyzer") as pool:
         futures = {
             pool.submit(local_worker, i, group, args.out_dir, args.generate_json): i
