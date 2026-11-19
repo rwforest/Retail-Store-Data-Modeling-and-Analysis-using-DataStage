@@ -137,6 +137,66 @@ to a checkout explicitly, set:
 $env:LAKEBRIDGE_MIGRATION_ROOT = "C:\path\to\repository\migration"
 ```
 
+## Prerequisites
+
+The package separates the Python Analyzer command from the native BladeBridge converter.
+
+| Component | How it is provided | Required for | Interface |
+|---|---|---|---|
+| Lakebridge workflow package | Built and installed from `dist/*.whl` | All commands | `lakebridge-workflow` |
+| `databricks-bb-analyzer` | Installed into the same `uv`/Python environment | Official analysis of XML `DSExport` chunks | Console command `databricks-bb-analyzer` on `PATH`, or `--external-command` |
+| `databricks-bb-plugin` | Manually downloaded and unpacked | Optional offline `dbxconv` conversion | Extracted plugin folder passed to `run-dbxconv --plugin-dir` |
+
+### Analyzer prerequisite
+
+The Analyzer is a normal Python package. It does **not** use a folder flag. Install it into
+the same ephemeral `uv` environment as the workflow wheel:
+
+```powershell
+uv run `
+  --with ./lakebridge_workflow/dist/<wheel-file> `
+  --with "databricks-bb-analyzer~=0.3.0,!=0.3.1" `
+  lakebridge-workflow migrate `
+  --source <DSExport-or-condensed-source> `
+  --num-jobs <target-new-items>
+```
+
+The workflow discovers `databricks-bb-analyzer` on `PATH`. For a nonstandard launcher, use:
+
+```text
+--external-command "<analyzer-executable> --source-directory {source} --report-file {report} --source-tech Datastage --generate-json"
+```
+
+### BladeBridge plugin prerequisite
+
+The BladeBridge plugin is **not installed automatically** by this package. It is not needed
+by `migrate`; it is needed only when you separately run offline `dbxconv` conversion.
+
+The plugin wheel contains a native `dbxconv` binary and its converter configuration tree.
+Unpack it once into a local folder, for example:
+
+```powershell
+python -m zipfile -e <databricks_bb_plugin-wheel-file> bb_plugin
+```
+
+Then pass that folder to the converter command:
+
+```powershell
+uv run --python 3.12 `
+  --with ./lakebridge_workflow/dist/<wheel-file> `
+  lakebridge-workflow run-dbxconv `
+  --plugin-dir bb_plugin `
+  <xml-source-or-dir> `
+  <output-dir> `
+  <PYSPARK|SPARKSQL|DBSQL>
+```
+
+BladeBridge's native runtime supports Python 3.10–3.14; Python 3.12 is the recommended
+offline runner.
+
+`migrate` does **not** invoke `dbxconv`, so it has no plugin-folder flag. The plugin folder is
+used only by the separate `run-dbxconv` command.
+
 ## One-command migration workflow
 
 Use `migrate` to run the complete workflow from either a large `DSExport` file or a

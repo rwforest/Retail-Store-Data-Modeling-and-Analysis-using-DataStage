@@ -48,7 +48,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Optional: root name or folder substring filter (default: no filter)")
     p.add_argument("--external-command",
                    help="Optional: official analyzer command with {source}, {report}, and {json} "
-                        "placeholders (default: discover databricks-bb-analyzer on PATH)")
+                        "placeholders. The Analyzer is installed in the uv/Python environment; "
+                        "this workflow discovers databricks-bb-analyzer on PATH by default")
     p.add_argument("--reset-history", action="store_true",
                    help="Optional: start from an empty migration state (default: false)")
     p.add_argument("--overwrite", action="store_true",

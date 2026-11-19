@@ -33,7 +33,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("paths", nargs="*", help="Legacy [plugin] input output [target], or input output [target]")
     p.add_argument("--plugin-dir", type=Path, default=Path("bb_plugin"),
-                   help="Extracted databricks_bb_plugin wheel root")
+                   help="Manually unpacked databricks_bb_plugin wheel root; not installed by "
+                        "the workflow package")
     p.add_argument("--target", choices=TARGETS, help="Conversion target (default PYSPARK)")
     p.add_argument("--fail-fast", action="store_true", help="Stop at first failed conversion")
     p.add_argument("--continue-on-error", action="store_true",

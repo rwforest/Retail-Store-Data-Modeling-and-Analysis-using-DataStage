@@ -727,7 +727,9 @@ wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
 # Only --source and --num-jobs are required. Default chunk size: 500 jobs per XML chunk.
 # Analyzer workers default to one per XML chunk; a lower explicit count distributes chunks.
 # Transpiler workers default to one per selected job; a lower explicit count distributes jobs.
-# See migration/lakebridge_workflow/README.md for every optional flag and default.
+# See migration/lakebridge_workflow/README.md for prerequisites, optional flags, and defaults.
+# databricks-bb-analyzer is installed in the uv environment; the BladeBridge plugin is only
+# needed for the separate run-dbxconv command and is not installed by this package.
 uv run --with "$wheel" \
   lakebridge-workflow migrate \
   --source <DSExport-or-condensed-source> \
