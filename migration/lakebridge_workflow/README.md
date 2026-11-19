@@ -402,11 +402,53 @@ The consolidated report computes its values from the selected source at runtime.
 
 The exact numbers depend on the source export or condensed-job directory passed to the CLI.
 
-## Optimization report
+## Complexity scoring (Lakebridge Analyzer)
 
-`optimize` runs a second, independent scoring pass over the same consolidated JSON
-`build-hierarchy` consumes. It does not touch `dbxconv` or the deterministic transpiler;
-both stay a literal lift-and-shift. It looks for four known DataStage-to-Databricks wins:
+`inventory[].complexityLevel` in the consolidated report -- the field `build-hierarchy`
+and `optimize` both read, and the column the `Job Details` tab of
+`analysis/lakebridge-analyzer.xlsx` calls `Categorization` -- is the official Lakebridge
+Analyzer's complexity score, not something this package computes. Every object gets one
+of four levels, used to prioritize migration effort and flag what needs manual review
+after transpilation:
+
+| Level | What it means | Typical action |
+|---|---|---|
+| **LOW** | Few components, no advanced constructs | Transpile directly; little or no manual review expected |
+| **MEDIUM** | Moderate use of joins/lookups/expressions | Transpile; review transpiler warnings before deploying |
+| **HIGH** | Heavy use of joins/lookups/expressions, or complex/unstructured stages | Plan for manual review after transpilation; test thoroughly |
+| **VERY_HIGH** | Very heavy use of the above, or three HIGH breaks at once | Allocate dedicated review time; consider Switch for intent-aware conversion |
+
+For DataStage specifically, the official rules
+([`complexity_scoring.mdx`](https://github.com/databrickslabs/lakebridge/blob/main/docs/lakebridge/docs/assessment/analyzer/complexity_scoring.mdx))
+start every job at LOW, then raise it the first time a threshold is crossed:
+
+| Raise to | Any one of |
+|---|---|
+| MEDIUM | 2-4 expressions with 5+ function calls · >1 source · >=1 join · 4-6 lookups · >1 target · >=10 total function calls |
+| HIGH | three MEDIUM breaks at once · 5-7 expressions with 5+ function calls · >=20 job components · >=20 total function calls · a complex/unstructured stage (e.g. `ChangeCapture`) · 7-14 lookups |
+| VERY_HIGH | three HIGH breaks at once · >7 expressions with 5+ function calls · >15 lookups · >=50 job components |
+
+This repository's checked-in `analysis/lakebridge-analyzer.xlsx` was produced by the real
+Analyzer (`bladespector`, §3 of `migration/README.md`) against these exact rules: VERY_HIGH
+5 (J06 SCD2, J10 Fact Sales, J17 Customer 360, J22 DQ checks, the master sequence), HIGH 17,
+MEDIUM 2. When the Analyzer binary is not available, `analyze`'s offline fallback
+(`common.complexity_from_nodes`) approximates it from a much simpler formula --
+`total_nodes + expressions * 2`, bucketed at 10/25/60 -- for condensed jobs the checked-in
+workbook doesn't already cover. It is a stand-in, not a reimplementation of the rules above;
+a job present in `analysis/lakebridge-analyzer.xlsx` always keeps the authoritative value
+(`analyze.read_authoritative_metrics`).
+
+## Optimization scoring (this package)
+
+Complexity says how hard a job is to migrate. It says nothing about whether the job's
+*design* is worth revisiting once it lands -- a LOW-complexity job can still be a blind
+truncate-and-reload, and a VERY_HIGH job can be VERY_HIGH precisely because it hand-rolls
+logic Databricks now does natively (DataStage's own rules single out exactly this:
+"Complex or Unstructured nodes... (ChangeCapture, etc.)" is a HIGH break). `optimize` is
+a second, independent scoring pass over the same consolidated JSON that answers that
+second question, for one source technology (DataStage) instead of the Analyzer's eight.
+It does not touch `dbxconv` or the deterministic transpiler; both stay a literal
+lift-and-shift. It looks for four known DataStage-to-Databricks wins:
 
 | Finding | What it looks for | The Databricks win |
 |---|---|---|
@@ -415,12 +457,28 @@ both stay a literal lift-and-shift. It looks for four known DataStage-to-Databri
 | Duplicate queries | The same embedded SQL statement, filter predicate, or derivation expression repeated across jobs | Factor into one shared view, macro, or parameterized job |
 | Filters pushed too late | A join/lookup/aggregation with no filter stage anywhere in the job, or embedded SQL with no `WHERE` | Push the predicate before the expensive stage |
 
-Each job gets an **optimization index** score and a HIGH/MEDIUM/LOW band, the same shape
-as the Analyzer's own complexity index, so the two reports read side by side: complexity
-says how hard a job is to migrate, the optimization index says how worth re-architecting
-it is once it lands. Duplicate-logic groups that span two or more jobs are also listed
-separately as **merge candidates** -- the specific jobs sharing the duplicated logic, and
-a suggested consolidation.
+Each job's findings are weighted into a score, exactly the way the Analyzer starts a job
+at LOW and raises it on each break -- except here the breaks add up instead of just
+raising a level, since a job can need more than one of these fixes at once:
+
+```text
+score = 4  if hand-rolled SCD2/change-detection is present
+      + 2 * min(truncate-and-reload write count, 3)
+      + 2 * min(join/aggregate-without-a-filter count, 3)
+      + 2 * number of duplicate-logic groups this job belongs to
+```
+
+| Band | Score | Typical cause |
+|---|---|---|
+| **NONE** | 0 | No findings; excluded from the report |
+| **LOW** | 1-3 | A single truncate-and-reload write and nothing else |
+| **MEDIUM** | 4-7 | Several truncate-and-reload writes, or one plus a missing filter |
+| **HIGH** | >=8 | A hand-rolled SCD2 pattern, or several findings stacked on one job |
+
+The caps (`min(..., 3)`) keep one very large job from drowning out everything else in the
+same way the Analyzer's own thresholds are bucketed rather than unbounded. Duplicate-logic
+groups that span two or more jobs are also listed separately as **merge candidates** --
+the specific jobs sharing the duplicated logic, and a suggested consolidation.
 
 ```powershell
 lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix optimization_report
@@ -429,7 +487,18 @@ lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix opti
 Output: `optimization_report.json` / `.xlsx` with a `Summary`, `Optimization Index`,
 `Truncate-Reload Writes`, `SCD2 Candidates`, `Duplicate Queries`, `Queries Without
 Filters`, and `Merge Candidates` tab. `migrate` and `workflow` run it automatically
-(no extra flag) right after the hierarchy build.
+(no extra flag) right after the hierarchy build. This repository's own result, from its
+23 jobs, is checked in at
+[`../analysis/optimization_report.xlsx`](../analysis/optimization_report.xlsx): 7 HIGH /
+12 MEDIUM / 4 LOW, with J06 correctly isolated as the one SCD2 candidate (`migration/README.md`
+§8b has the full breakdown).
+
+Like the Analyzer's complexity score, this is a heuristic screening tool: every finding
+needs a human to confirm it is worth acting on. Unlike the Analyzer, the rules here are
+regexes over stage/property names and text, not a parsed grammar -- see the module
+docstring in `optimize.py` for why they deliberately avoid `\b` word boundaries on
+DataStage's `Px`-prefixed/underscore-joined identifiers, and tune them for other naming
+conventions before trusting them on a different source.
 
 ## Large-export workflow
 
