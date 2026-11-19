@@ -23,6 +23,8 @@ import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+from functools import lru_cache
+from types import SimpleNamespace
 from pathlib import Path
 from typing import Any
 
@@ -30,24 +32,33 @@ from .common import atomic_json
 from .paths import find_migration_root
 from .plan_migration_batch import apply_manifest, empty_state, make_plan, normalize_state
 
+@lru_cache(maxsize=1)
+def repo_modules():
+    """Lazily load repository-specific modules only when transpilation starts."""
+    migration_root = find_migration_root()
+    repo = migration_root.parent
+
+    def load(name: str, path: Path):
+        sys.path.insert(0, str(path.parent))
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"cannot import {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    return SimpleNamespace(
+        migration_root=migration_root,
+        repo=repo,
+        pipeline=load("retail_pipeline_def", repo / "pipeline" / "pipeline_def.py"),
+        ds2spark=load("retail_ds2spark", migration_root / "ds2spark.py"),
+        build_bundle=load("retail_build_bundle", migration_root / "build_bundle.py"),
+        dsx_to_xml=load("retail_dsx_to_xml", migration_root / "dsx_to_xml.py"),
+    )
+
+
 MIGRATION_ROOT = find_migration_root()
 REPO = MIGRATION_ROOT.parent
-
-
-def load_module(name: str, path: Path):
-    sys.path.insert(0, str(path.parent))
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot import {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-pipeline = load_module("retail_pipeline_def", REPO / "pipeline" / "pipeline_def.py")
-ds2spark = load_module("retail_ds2spark", MIGRATION_ROOT / "ds2spark.py")
-build_bundle = load_module("retail_build_bundle", MIGRATION_ROOT / "build_bundle.py")
-dsx_to_xml = load_module("retail_dsx_to_xml", MIGRATION_ROOT / "dsx_to_xml.py")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -88,7 +99,7 @@ def load_state(path: Path, reset: bool) -> dict[str, Any]:
 
 def write_notebook(job: Any, directory: Path) -> Path:
     path = directory / f"{job.name}.py"
-    path.write_text(ds2spark.Compiler(job).compile(), encoding="utf-8")
+    path.write_text(repo_modules().ds2spark.Compiler(job).compile(), encoding="utf-8")
     return path
 
 
@@ -96,10 +107,10 @@ def create_xml(name: str, source_dsx_dir: Path, xml_dir: Path) -> Path | None:
     source = source_dsx_dir / f"{name}.dsx"
     if not source.is_file():
         return None
-    nodes = dsx_to_xml.parse(source.read_text(encoding="cp1252"))
+    nodes = repo_modules().dsx_to_xml.parse(source.read_text(encoding="cp1252"))
     xml_dir.mkdir(parents=True, exist_ok=True)
     target = xml_dir / f"{name}.xml"
-    target.write_text(dsx_to_xml.to_xml(nodes), encoding="utf-8")
+    target.write_text(repo_modules().dsx_to_xml.to_xml(nodes), encoding="utf-8")
     return target
 
 
@@ -213,7 +224,7 @@ def reused_notebook_path(state: dict[str, Any], name: str) -> str:
 
 def workflow_yaml(batch_id: int, root_names: list[str], new_jobs: set[str],
                   all_jobs: set[str], state: dict[str, Any]) -> str:
-    tasks = build_bundle.build_tasks()
+    tasks = repo_modules().build_bundle.build_tasks()
     selected = all_jobs
     # Keep support tasks needed by the retail DAG; they are copied into this batch.
     included = [t for t in tasks if t["nb"].startswith("_") or t["nb"] in selected]
@@ -348,7 +359,7 @@ def run(args: argparse.Namespace) -> int:
     switch_dir.mkdir(parents=True)
     resources.mkdir(parents=True)
 
-    pipeline_jobs = {j.name: j for j in pipeline.build_all()}
+    pipeline_jobs = {j.name: j for j in repo_modules().pipeline.build_all()}
     new_jobs = [job for job in manifest["new_jobs_in_bottom_up_order"]]
     new_names = {job["name"] for job in new_jobs if job["action"] == "MIGRATE_NOTEBOOK"}
     all_names = {job["name"] for job in new_jobs} | {

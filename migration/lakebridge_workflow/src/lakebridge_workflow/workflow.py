@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 from pathlib import Path
 
-from . import analyze, build_hierarchy, plan_migration_batch, transpile_batch
 from .paths import find_migration_root
 
 
@@ -43,6 +43,7 @@ def run(args: argparse.Namespace) -> int:
     report_json = args.assessment_prefix.with_suffix(".json")
     hierarchy_json = args.hierarchy_prefix.with_suffix(".json")
 
+    analyze = importlib.import_module(".analyze", __package__)
     print("Step 1/4: offline assessment", flush=True)
     rc = analyze.main([
         "--source-directory", str(root / "switch_input"),
@@ -54,6 +55,7 @@ def run(args: argparse.Namespace) -> int:
     if rc:
         return rc
 
+    build_hierarchy = importlib.import_module(".build_hierarchy", __package__)
     print("Step 2/4: lineage hierarchy", flush=True)
     rc = build_hierarchy.main([
         "--input-json", str(report_json),
@@ -62,6 +64,7 @@ def run(args: argparse.Namespace) -> int:
     if rc:
         return rc
 
+    plan_migration_batch = importlib.import_module(".plan_migration_batch", __package__)
     print("Step 3/4: closed-lineage plan", flush=True)
     plan_args = [
         "--input-json", str(hierarchy_json),
@@ -75,6 +78,7 @@ def run(args: argparse.Namespace) -> int:
     if rc or args.plan_only:
         return rc
 
+    transpile_batch = importlib.import_module(".transpile_batch", __package__)
     print("Step 4/4: batch transpilation", flush=True)
     transpile_args = [
         "--input-json", str(hierarchy_json),

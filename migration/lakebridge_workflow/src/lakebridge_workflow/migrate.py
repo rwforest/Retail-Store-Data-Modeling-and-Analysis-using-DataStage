@@ -8,19 +8,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import importlib
 import shutil
 from pathlib import Path
 
-from . import (
-    analyze,
-    analyze_parallel,
-    build_hierarchy,
-    merge_reports,
-    plan_migration_batch,
-    run_dbxconv,
-    split_datastage_xml,
-    transpile_batch,
-)
 from .paths import find_migration_root
 
 
@@ -119,6 +110,7 @@ def run_dsexport_analysis(args: argparse.Namespace) -> Path:
         shutil.rmtree(path, ignore_errors=True)
         path.mkdir(parents=True, exist_ok=True)
 
+    split_datastage_xml = importlib.import_module(".split_datastage_xml", __package__)
     split_datastage_xml.main([
         str(args.source),
         "--out-dir", str(seq_chunks),
@@ -135,6 +127,7 @@ def run_dsexport_analysis(args: argparse.Namespace) -> Path:
         "--quiet",
     ])
 
+    analyze_parallel = importlib.import_module(".analyze_parallel", __package__)
     analyzer_args = [
         "--generate-json",
     ]
@@ -170,6 +163,7 @@ def run_dsexport_analysis(args: argparse.Namespace) -> Path:
             raise SystemExit(f"error: ETL analysis failed with exit code {rc}")
         report_dirs.append(etl_reports)
 
+    merge_reports = importlib.import_module(".merge_reports", __package__)
     merge_args: list[str] = []
     for directory in report_dirs:
         merge_args += ["--reports-dir", str(directory)]
@@ -186,6 +180,7 @@ def run_condensed_analysis(args: argparse.Namespace) -> Path:
     report_prefix = args.analysis_dir / "consolidated_all_jobs"
     args.analysis_dir.mkdir(parents=True, exist_ok=True)
 
+    analyze = importlib.import_module(".analyze", __package__)
     rc = analyze.main([
         "--source-directory", str(args.source),
         "--report-file", str(report_prefix.with_suffix(".xlsx")),
@@ -213,6 +208,7 @@ def run_bladebridge_phase(args: argparse.Namespace) -> Path:
         raise SystemExit(f"error: no standalone XML files found for BladeBridge: {xml_dir}")
 
     output_dir = args.dbxconv_output_dir or batch_dir / f"bladebridge_{args.dbxconv_target.lower()}"
+    run_dbxconv = importlib.import_module(".run_dbxconv", __package__)
     rc = run_dbxconv.main([
         "--plugin-dir", str(args.dbxconv_plugin_dir),
         "--target", args.dbxconv_target,
@@ -235,6 +231,7 @@ def run(args: argparse.Namespace) -> int:
         print("Phase 1/5: analyze condensed jobs", flush=True)
         report_json = run_condensed_analysis(args)
 
+    build_hierarchy = importlib.import_module(".build_hierarchy", __package__)
     print("Phase 2/5: lineage hierarchy", flush=True)
     hierarchy_prefix = args.analysis_dir / "job_hierarchy"
     rc = build_hierarchy.main([
@@ -245,6 +242,7 @@ def run(args: argparse.Namespace) -> int:
         raise SystemExit(f"error: hierarchy build failed with exit code {rc}")
     hierarchy_json = hierarchy_prefix.with_suffix(".json")
 
+    plan_migration_batch = importlib.import_module(".plan_migration_batch", __package__)
     print("Phase 3/5: closed-lineage plan", flush=True)
     plan_args = [
         "--input-json", str(hierarchy_json),
@@ -258,6 +256,7 @@ def run(args: argparse.Namespace) -> int:
     if rc or args.plan_only:
         return rc
 
+    transpile_batch = importlib.import_module(".transpile_batch", __package__)
     print("Phase 4/5: parallel batch transpilation", flush=True)
     transpile_args = [
         "--input-json", str(hierarchy_json),

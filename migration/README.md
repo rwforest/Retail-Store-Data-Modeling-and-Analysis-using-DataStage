@@ -720,6 +720,7 @@ python3 migration/ds2spark.py                                              # com
 python3 migration/build_bundle.py                                          # job YAML + support notebooks
 
 # optional packaged closed-lineage analyzer/hierarchy/batch workflow
+# Built with uv_build; no setuptools build dependency is downloaded.
 cd migration/lakebridge_workflow && uv build --wheel --out-dir dist && cd ..
 wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
 
