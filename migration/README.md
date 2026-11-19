@@ -769,6 +769,24 @@ patterns in `optimize.py` tuned (the module docstring explains why `\b` word bou
 don't work on DataStage's `Px`-prefixed/underscore-joined identifiers, and why the
 patterns match as plain substrings instead).
 
+**Why this matters before reaching for Switch/SDP.** There is no automated path from
+`dbxconv`'s output to the SDP architecture in §7 -- BladeBridge's `dbxconv` has no SDP
+target at all (only `PYSPARK`/`SPARKSQL`/`DBSQL`, §8a.2), and the SDP version here was
+built through a completely separate route: Switch, with a custom SDP prompt, fed from
+condensed job text and hand-written sequence-orchestration context, at a measured cost of
+about 526k tokens for 23 jobs (§3, §8, "Cost"). At real migration scale that cost does not
+survive being paid for every job "to see if SDP helps" -- it has to be scoped in advance,
+and scoping it is exactly what the optimization index is for.
+[`triage-for-switch`](lakebridge_workflow/README.md#scoping-the-switchllm-pass-triage-for-switch)
+turns the index into that scope: it reads `optimize`'s own JSON and copies only the
+selected jobs' condensed specs into a fresh Switch input directory, with a manifest
+recording why each one was picked. On this repository's own 23 jobs, the default
+selection (the HIGH band plus the one SCD2 candidate) is 7 of 24 items -- an estimated
+~71% token reduction versus running Switch on everything. The recommended order is:
+`dbxconv`/deterministic transpile (free) → validate that output against the source (§5-6)
+→ `optimize` (free) → `triage-for-switch` → Switch, only on the triaged subset (the only
+step with a per-token cost).
+
 ---
 
 ## 8. Open items and known limitations
@@ -808,6 +826,11 @@ patterns match as plain substrings instead).
   heuristics (duplicate/non-sargable/cartesian-risk embedded SQL, `SELECT *`/`UNION`/subquery-in-`WHERE`, missing
   `WHERE`) are untested against a source that actually has embedded SQL -- this repository's 23 jobs have none;
   the `jb_*`/`job-32.xml` samples in §8a.4 do, but were not run back through `optimize`.
+- **`triage-for-switch` is validated only at this repository's scale** (24 items). The selection logic and token
+  estimate are exercised against this repo's own `optimization_report.json`; neither has been run against a
+  source with the hundreds or thousands of jobs (or embedded queries) it's actually meant for, so the real
+  percentage selected -- and whether 526k/23 tokens-per-job is even a reasonable starting estimate for a very
+  different source -- is unverified at that scale.
 
 ---
 
@@ -901,7 +924,7 @@ Two operational notes. With two CLI profiles on the same host, Lakebridge's inne
 | `ds2spark.py` | Deterministic compiler: job model → Databricks notebooks |
 | `build_bundle.py` | Master sequence → Lakeflow Job YAML + support notebooks |
 | `run_bladebridge.py` | Runs BladeBridge through its Python wrapper (kept as the reproduction of the no-output issue) |
-| `lakebridge_workflow/` | Installable end-to-end workflow package: streaming splitter, analyzer, hierarchy, optimization scoring (§8b), planning, batch transpiler, BladeBridge runner, Windows wrapper, guide, and built wheel |
+| `lakebridge_workflow/` | Installable end-to-end workflow package: streaming splitter, analyzer, hierarchy, optimization scoring (§8b), Switch/LLM-cost triage, planning, batch transpiler, BladeBridge runner, Windows wrapper, guide, and built wheel |
 | `compare_notebooks.py` | Static view-by-view comparison of two notebook sets |
 | `switch_prompt/` | `build_prompt.py` → `datastage_to_notebook.yml` (Switch custom prompt) |
 | `switch_config.yml` | Switch configuration (prompt path, adaptive thinking) |

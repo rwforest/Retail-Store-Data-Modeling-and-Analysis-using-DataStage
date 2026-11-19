@@ -19,6 +19,7 @@ COMMAND_MODULES = {
     "run-dbxconv": "run_dbxconv",
     "split": "split_datastage_xml",
     "transpile": "transpile_batch",
+    "triage-for-switch": "triage_for_switch",
     "workflow": "workflow",
 }
 

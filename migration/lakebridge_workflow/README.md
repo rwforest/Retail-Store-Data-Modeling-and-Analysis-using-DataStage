@@ -33,6 +33,7 @@ flowchart TD
     H --> I["Analyzer JSON and XLSX<br/>inventory, metrics, and lineage"]
     I --> J["build_hierarchy.py<br/>root trees, paths, and classifications"]
     I --> J2["optimize.py<br/>truncate/reload, SCD2, duplicate-query,<br/>and merge-candidate scoring"]
+    J2 --> J3["triage_for_switch.py<br/>scope the LLM pass to what optimize found worth it"]
 
     J --> K["plan_migration_batch.py<br/>closed-lineage and history-aware planning"]
     K --> L{"Job already migrated?"}
@@ -81,6 +82,7 @@ lakebridge_workflow/
 │   ├── merge_reports.py
 │   ├── build_hierarchy.py
 │   ├── optimize.py             # truncate/reload, SCD2, duplicate-query, merge-candidate report
+│   ├── triage_for_switch.py    # scope the LLM/Switch pass to what optimize found worth it
 │   ├── migrate.py
 │   ├── plan_migration_batch.py
 │   ├── transpile_batch.py
@@ -372,6 +374,7 @@ lakebridge-workflow analyze --list-tech
 lakebridge-workflow analyze --source-directory <condensed-or-xml-source> --report-file <report-prefix>.xlsx --source-tech Datastage --generate-json
 lakebridge-workflow build-hierarchy --input-json <report-prefix>.json --out-prefix <hierarchy-prefix>
 lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix <optimization-report-prefix>
+lakebridge-workflow triage-for-switch --optimization-json <optimization-report>.json --condensed-dir <condensed-dir> --out-dir <triaged-dir> --dry-run
 lakebridge-workflow plan --num-jobs <target-new-items> --dry-run
 lakebridge-workflow transpile `
   --num-jobs <target-new-items> `
@@ -529,6 +532,64 @@ out while building the repeated-derivation check: this repository's J08 computes
 `employee_sk` -- textually identical, but two unrelated surrogate-key counters on two
 different links, not the same value computed twice. The check excludes DataStage's
 row-context macros for exactly this reason.
+
+## Scoping the Switch/LLM pass (`triage-for-switch`)
+
+`optimize` and `dbxconv`/`transpile` are both free: a regex pass over a JSON report, and a
+local binary or deterministic compiler, with no API call either way. Switch is not --
+this repository's own 23-job run cost about 526k tokens on `databricks-claude-sonnet-5-5`
+(§8, "Cost"), roughly 22.9k tokens per job. At real migration scale -- hundreds of jobs,
+thousands, or far more for a source with a very large number of embedded queries --
+running every item through Switch "to see if SDP (or even just a better notebook) helps"
+is not a cost most budgets survive, and it isn't necessary. That is exactly what
+`optimize`'s index is for: it says which jobs are worth that spend, in advance, for free.
+
+The recommended order for a real migration, cheapest and least risky first:
+
+1. **`dbxconv`** (or the deterministic `transpile`) over the full estate. Free, offline,
+   no API call -- the literal lift-and-shift (`migration/README.md` §8a).
+2. **Validate that output** against the source before trusting it: run it, and reconcile
+   it against source behavior where you can. This package does not automate that
+   validation step; `migration/README.md` §5-6 is how this repository did it (DQX). Don't
+   skip this to get to the exciting part faster -- it's the step that tells you the
+   lift-and-shift baseline is actually correct before you spend anything re-architecting
+   parts of it.
+3. **`optimize`** over the same full estate. Free, regex-only, no API call: the
+   HIGH/MEDIUM/LOW optimization index and merge-candidate list.
+4. **`triage-for-switch`** to turn that index into a small, deliberately scoped Switch
+   input directory -- never "every job, to be safe."
+5. **Switch**, only on that subset. The only step here with a per-token cost.
+
+```powershell
+lakebridge-workflow triage-for-switch `
+  --optimization-json optimization_report.json `
+  --condensed-dir switch_input `
+  --out-dir switch_input_triaged `
+  --bands HIGH
+```
+
+Selection combines, by default: any job in the chosen `--bands` (default `HIGH`), plus
+every `scd2Candidates`/`cartesianRiskJoins` job regardless of band (`--no-scd2` /
+`--no-cartesian-risk` turn that off), plus anything named in `--jobs`. `--min-score`
+adds a numeric floor instead of/alongside a band. `--dry-run` prints the selection and an
+illustrative token-cost estimate without copying anything, so you can sanity-check the
+list before committing to it or to a directory.
+
+On this repository's own 23 jobs, the default (`--bands HIGH`) selects **7 of 24 items
+(29.2%)** -- J06 (the SCD2 candidate), plus six fact/dimension jobs -- for an estimated
+**~71% token reduction** versus sending all 23 through Switch. That ratio is illustrative
+of this source, not a universal constant: override `--avg-tokens-per-job` with a number
+measured on your own, and expect the selected percentage to vary with how your source's
+findings are distributed. The output includes a JSON and CSV manifest (job, band, score,
+every reason it was selected, its findings) so the selection is reviewable before Switch
+ever sees it, and a `--jobs` escape hatch when a human reviewing the report wants to add
+or remove a specific job rather than relying purely on the score.
+
+This command, like `optimize`, never calls Switch or any other API itself -- it only
+copies condensed `.txt` files already on disk and writes a manifest. `migrate` and
+`workflow` do not run it automatically, on purpose: deciding how much to spend on Switch
+is a judgment call for a human reviewing the optimization report, not something to
+automate between `optimize` and an LLM call.
 
 ## Large-export workflow
 
