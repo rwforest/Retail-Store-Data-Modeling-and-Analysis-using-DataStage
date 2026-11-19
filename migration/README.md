@@ -780,11 +780,18 @@ and scoping it is exactly what the optimization index is for.
 [`triage-for-switch`](lakebridge_workflow/README.md#scoping-the-switchllm-pass-triage-for-switch)
 turns the index into that scope: it reads `optimize`'s own JSON and copies only the
 selected jobs' condensed specs into a fresh Switch input directory, with a manifest
-recording why each one was picked. On this repository's own 23 jobs, the default
-selection (the HIGH band plus the one SCD2 candidate) is 7 of 24 items -- an estimated
-~71% token reduction versus running Switch on everything. The recommended order is:
-`dbxconv`/deterministic transpile (free) → validate that output against the source (§5-6)
-→ `optimize` (free) → `triage-for-switch` → Switch, only on the triaged subset (the only
+recording why each one was picked. Critically, it does **not** treat an SCD2 candidate as
+ready to send to Switch alone -- §7.2 already proved that fails (feeding J06 to Switch by
+itself produced `dim_customer` with 94 rows instead of 948, because the orchestration
+that makes the pattern correct lives in the sequence, not the job). SCD2 candidates are
+copied into a separate `needs_manual_bundling/` subfolder with a `READ_ME_FIRST.txt`
+explaining how to build the kind of hand-assembled unit (`J02_J05_J06_Dim_Customer_Unit.txt`)
+§7.2 actually needed; only everything else lands in `ready/`. On this repository's own 23
+jobs, the default selection (the HIGH band plus the one SCD2 candidate) is 7 of 24 items --
+6 ready, 1 needing bundling -- an estimated ~71% token reduction versus running Switch on
+everything. The recommended order is: `dbxconv`/deterministic transpile (free) → validate
+that output against the source (§5-6) → `optimize` (free) → `triage-for-switch` → Switch,
+only on the triaged subset (the only
 step with a per-token cost).
 
 ---

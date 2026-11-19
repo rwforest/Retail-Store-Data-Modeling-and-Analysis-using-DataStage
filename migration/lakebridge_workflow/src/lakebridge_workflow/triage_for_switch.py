@@ -14,6 +14,18 @@ the matching jobs' condensed specifications into a fresh Switch input directory,
 only ever sees the subset selected for a stated reason (a HIGH band, an SCD2 candidate, a
 cartesian-risk join, or an explicit list) -- never "everything, to be safe."
 
+DANGER -- SCD2 candidates are not ready to send to Switch on their own. This repository's
+own SDP build already proved it the hard way (migration/README.md §7.2): feeding J06 to
+Switch by itself, with none of its sequence's initial-load/promote siblings, produced a
+`dim_customer` with 94 rows instead of 948, because the orchestration that makes the SCD2
+pattern correct lives in the *sequence*, not in that one job's text. The working input was
+a hand-assembled unit (`switch_input_sdp/J02_J05_J06_Dim_Customer_Unit.txt`) -- the SCD2
+job plus its initial-load sibling plus a hand-written header describing the sequence's
+orchestration -- in a different directory this script never reads. So: every job selected
+as an `scd2Candidate` is copied into `<out-dir>/needs_manual_bundling/`, never
+`<out-dir>/ready/`, with a README explaining why, so it can't be fed to Switch by mistake
+alongside the jobs that really are ready to convert alone.
+
 Recommended order for a real migration, cheapest and least risky first:
 
   1. `dbxconv` (or the deterministic `transpile`/compiler) over the full estate. Free,
@@ -54,6 +66,42 @@ from .paths import find_migration_root
 # depends heavily on job size and how much the condensing step shrinks it (§3's own
 # dsx_condense.py got 4-10x smaller, 9x for most jobs).
 MEASURED_TOKENS_PER_JOB = 526_000 / 23
+
+# Selection reasons that mean "this job cannot be converted by Switch on its own" -- the
+# pattern only makes sense with sequence-level orchestration context that lives outside any
+# single job's condensed text. See the module docstring's DANGER note.
+NEEDS_BUNDLING_REASONS = {"scd2Candidate"}
+
+BUNDLING_WARNING = """\
+DO NOT feed the jobs in this folder to Switch on their own.
+
+Each one was flagged by `optimize` as a hand-rolled SCD2/change-detection pattern --
+exactly the shape this repository rebuilt with Auto CDC in its SDP version
+(migration/README.md §7). That rebuild needed more than the one job's text: the SCD2
+semantics (initial load only if the dimension is missing, apply the next snapshot,
+promote) live in the DataStage *sequence*, not in any single job. The project's own
+first attempt at skipping that step is documented in §7.2 -- feeding the SCD2 job to
+Switch alone produced a `dim_customer` with 94 rows instead of 948, because Switch had
+no way to know the dimension is read *after* the whole orchestration has run.
+
+The input that actually worked was a hand-assembled unit:
+`switch_input_sdp/J02_J05_J06_Dim_Customer_Unit.txt` -- the SCD2 job, its initial-load
+sibling, and a short hand-written header stating the sequence's orchestration logic
+(summarised from `pipeline_dag.json`, because that information exists only in the
+sequence). Build the same kind of unit for each job below before sending it to Switch:
+
+  1. Find this job's parent sequence and every sibling job that initial-loads, checks,
+     or promotes the same target (job_hierarchy.json's `parents`/`children`, or the
+     sequence export itself -- optimize/triage do not know this, only the sequence does).
+  2. Concatenate their condensed job text into one file, in execution order.
+  3. Write a short header describing the orchestration by hand (the condition that
+     decides whether the initial load runs, and what the promote step does).
+  4. Follow migration/README.md §7.2's prompt notes -- in particular, state explicitly
+     that downstream jobs read the dimension *after* the full orchestration, not just
+     the initial load.
+
+Jobs in this folder: see the manifest (../{manifest_name}) for each one's findings.
+"""
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -144,11 +192,13 @@ def run(args: argparse.Namespace) -> int:
     missing: list[str] = []
     for job, info in sorted(selected.items()):
         source = args.condensed_dir / f"{job}.txt"
+        needs_bundling = any(r in NEEDS_BUNDLING_REASONS for r in info["reasons"])
         rows.append({
             "job": job, "band": info["band"] or "N/A", "score": info["score"],
             "reasons": ", ".join(info["reasons"]),
             "findings": "; ".join(info["findings"]),
             "sourceFound": source.is_file(),
+            "readyForSwitch": not needs_bundling,
         })
         if not source.is_file():
             missing.append(job)
@@ -158,14 +208,22 @@ def run(args: argparse.Namespace) -> int:
               f"{args.condensed_dir}, skipped: {', '.join(sorted(missing))}")
 
     copyable = [r for r in rows if r["sourceFound"]]
+    ready = [r for r in copyable if r["readyForSwitch"]]
+    needs_bundling = [r for r in copyable if not r["readyForSwitch"]]
     tokens_selected = len(copyable) * args.avg_tokens_per_job
     tokens_all = total_jobs * args.avg_tokens_per_job
     pct_selected = (len(copyable) / total_jobs * 100) if total_jobs else 0.0
     pct_saved = 100.0 - pct_selected
 
     print(f"Selected {len(copyable)} of {total_jobs} jobs ({pct_selected:.1f}%) for Switch/LLM conversion.")
-    for r in sorted(copyable, key=lambda r: (-r["score"], r["job"])):
-        print(f"  {r['job']:<40} {r['band']:<7} score={r['score']:<3} {r['reasons']}")
+    print(f"  {len(ready)} ready to convert alone:")
+    for r in sorted(ready, key=lambda r: (-r["score"], r["job"])):
+        print(f"    {r['job']:<40} {r['band']:<7} score={r['score']:<3} {r['reasons']}")
+    if needs_bundling:
+        print(f"  {len(needs_bundling)} need manual bundling FIRST (see needs_manual_bundling/ below "
+              f"-- do not send these to Switch alone):")
+        for r in sorted(needs_bundling, key=lambda r: (-r["score"], r["job"])):
+            print(f"    {r['job']:<40} {r['band']:<7} score={r['score']:<3} {r['reasons']}")
     print(f"Illustrative token estimate at {args.avg_tokens_per_job:,.0f} tokens/job "
           f"(override with --avg-tokens-per-job):")
     print(f"  Selected subset:  ~{tokens_selected:,.0f} tokens")
@@ -180,10 +238,21 @@ def run(args: argparse.Namespace) -> int:
         if any(args.out_dir.iterdir()) and not args.overwrite:
             raise SystemExit(f"error: {args.out_dir} already exists and is not empty; pass --overwrite")
         shutil.rmtree(args.out_dir)
-    args.out_dir.mkdir(parents=True)
+    ready_dir = args.out_dir / "ready"
+    bundling_dir = args.out_dir / "needs_manual_bundling"
+    ready_dir.mkdir(parents=True)
+    if needs_bundling:
+        bundling_dir.mkdir(parents=True)
 
-    for r in copyable:
-        shutil.copy2(args.condensed_dir / f"{r['job']}.txt", args.out_dir / f"{r['job']}.txt")
+    for r in ready:
+        shutil.copy2(args.condensed_dir / f"{r['job']}.txt", ready_dir / f"{r['job']}.txt")
+    for r in needs_bundling:
+        shutil.copy2(args.condensed_dir / f"{r['job']}.txt", bundling_dir / f"{r['job']}.txt")
+
+    manifest_name = f"{args.out_dir.name}_manifest.json"
+    if needs_bundling:
+        (bundling_dir / "READ_ME_FIRST.txt").write_text(
+            BUNDLING_WARNING.format(manifest_name=manifest_name), encoding="utf-8")
 
     manifest = {
         "runInfo": {"builtAt": now_utc(), "optimizationReport": str(args.optimization_json),
@@ -191,24 +260,28 @@ def run(args: argparse.Namespace) -> int:
         "selection": {"bands": sorted(args.band_set), "minScore": args.min_score,
                       "includeScd2": args.include_scd2, "includeCartesianRisk": args.include_cartesian,
                       "explicitJobs": sorted(args.job_set)},
-        "summary": {"totalJobsScanned": total_jobs, "selected": len(copyable), "missing": missing,
-                    "percentSelected": round(pct_selected, 1),
+        "summary": {"totalJobsScanned": total_jobs, "selected": len(copyable),
+                    "readyForSwitch": len(ready), "needsManualBundling": len(needs_bundling),
+                    "missing": missing, "percentSelected": round(pct_selected, 1),
                     "avgTokensPerJob": args.avg_tokens_per_job,
                     "estimatedTokensSelected": round(tokens_selected),
                     "estimatedTokensFullEstate": round(tokens_all)},
         "jobs": rows,
     }
-    manifest_path = args.out_dir.parent / f"{args.out_dir.name}_manifest.json"
+    manifest_path = args.out_dir.parent / manifest_name
     atomic_json(manifest_path, manifest)
     csv_path = args.out_dir.parent / f"{args.out_dir.name}_manifest.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["job", "band", "score", "reasons", "findings", "sourceFound"])
+        writer = csv.DictWriter(fh, fieldnames=["job", "band", "score", "reasons", "findings",
+                                                 "sourceFound", "readyForSwitch"])
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"  Condensed specs: {args.out_dir}")
-    print(f"  Manifest JSON:   {manifest_path}")
-    print(f"  Manifest CSV:    {csv_path}")
+    print(f"  Ready for Switch:        {ready_dir}")
+    if needs_bundling:
+        print(f"  Needs manual bundling:   {bundling_dir} (READ_ME_FIRST.txt explains why)")
+    print(f"  Manifest JSON:           {manifest_path}")
+    print(f"  Manifest CSV:            {csv_path}")
     return 0
 
 

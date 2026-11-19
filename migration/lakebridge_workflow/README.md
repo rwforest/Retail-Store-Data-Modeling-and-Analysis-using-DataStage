@@ -575,15 +575,38 @@ adds a numeric floor instead of/alongside a band. `--dry-run` prints the selecti
 illustrative token-cost estimate without copying anything, so you can sanity-check the
 list before committing to it or to a directory.
 
+**An SCD2 candidate is not a job Switch can convert alone, and the output never pretends
+otherwise.** This repository's own SDP build proved that the hard way (§7.2): feeding its
+SCD2 job (J06) to Switch by itself -- with none of its sequence's initial-load/promote
+siblings -- produced a `dim_customer` with 94 rows instead of 948, because the
+orchestration that makes the pattern correct lives in the *sequence*, not in that job's
+text. The fix that actually worked was a hand-assembled unit
+(`switch_input_sdp/J02_J05_J06_Dim_Customer_Unit.txt`), which `--condensed-dir` never
+contains. So `--out-dir` is always split in two:
+
+- `<out-dir>/ready/` -- jobs that convert on their own; send these to Switch.
+- `<out-dir>/needs_manual_bundling/` -- SCD2 candidates, with a `READ_ME_FIRST.txt`
+  explaining why and how to build the kind of unit §7.2 needed, before anything in this
+  folder goes near Switch.
+
+The manifest's `readyForSwitch` column (and the console output's two separate lists)
+carry the same split, so neither a human skimming the CSV nor a script consuming the JSON
+can treat an SCD2 candidate as ready by accident.
+
 On this repository's own 23 jobs, the default (`--bands HIGH`) selects **7 of 24 items
-(29.2%)** -- J06 (the SCD2 candidate), plus six fact/dimension jobs -- for an estimated
-**~71% token reduction** versus sending all 23 through Switch. That ratio is illustrative
-of this source, not a universal constant: override `--avg-tokens-per-job` with a number
-measured on your own, and expect the selected percentage to vary with how your source's
-findings are distributed. The output includes a JSON and CSV manifest (job, band, score,
-every reason it was selected, its findings) so the selection is reviewable before Switch
-ever sees it, and a `--jobs` escape hatch when a human reviewing the report wants to add
-or remove a specific job rather than relying purely on the score.
+(29.2%)**: 6 land in `ready/` and the 1 SCD2 candidate (J06) lands in
+`needs_manual_bundling/` -- for an estimated **~71% token reduction** versus sending all
+23 through Switch. That estimate still counts the SCD2 candidate as one job's worth of
+tokens, the same as everything in `ready/`, which is an underestimate for it specifically
+-- once bundled with its siblings and a header (§7.2), the unit sent to Switch will be
+bigger than one job's share, not smaller. The ratio itself is illustrative of this
+source, not a universal constant: override `--avg-tokens-per-job` with a number measured
+on your own, and expect the selected percentage -- and the ready/needs-bundling split --
+to vary with how your source's findings are distributed.
+The manifest (job, band, score, every reason it was selected, its findings,
+`readyForSwitch`) makes the whole selection reviewable before Switch ever sees it, and a
+`--jobs` escape hatch lets a human reviewing the report add or remove a specific job
+rather than relying purely on the score.
 
 This command, like `optimize`, never calls Switch or any other API itself -- it only
 copies condensed `.txt` files already on disk and writes a manifest. `migrate` and
