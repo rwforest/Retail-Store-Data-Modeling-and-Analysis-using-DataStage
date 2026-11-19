@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
 import shutil
 import sys
 import time
@@ -62,15 +61,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--switch-input-dir", type=Path, default=MIGRATION_ROOT / "switch_input")
     p.add_argument("--source-dsx-dir", type=Path, default=REPO / "DataStage Jobs" / "Pipeline")
     p.add_argument("--no-xml", action="store_true", help="Do not create standalone XML copies")
-    p.add_argument("--workers", type=int, default=0, metavar="N",
-                   help="Transpiler worker processes (0 = automatically use available CPUs)")
+    p.add_argument("--workers", type=int, default=None, metavar="N",
+                   help="Transpiler workers; omitted or 0 uses one per selected job. A lower "
+                        "explicit count distributes jobs across workers")
     p.add_argument("--overwrite", action="store_true", help="Replace an existing batch directory")
     args = p.parse_args(argv)
     if args.num_jobs is None:
         p.error("--num-jobs is required")
     if args.num_jobs <= 0:
         p.error("--num-jobs must be positive")
-    if args.workers < 0:
+    if args.workers is not None and args.workers < 0:
         p.error("--workers must be zero or positive")
     return args
 
@@ -168,19 +168,22 @@ def transpile_worker(task: TranspileTask) -> dict[str, Any]:
     return result
 
 
-def run_parallel_transpile(tasks: list[TranspileTask], requested_workers: int) -> list[dict[str, Any]]:
+def run_parallel_transpile(tasks: list[TranspileTask],
+                            requested_workers: int | None) -> list[dict[str, Any]]:
     """Run independent job artifact tasks in a process pool.
 
-    ``requested_workers == 0`` selects an automatic count bounded by both available CPUs and
-    the number of tasks. The pool is closed before returning, so no worker can mutate batch
-    state or workflow YAML after the single-writer phase begins.
+    An omitted or zero worker count selects one worker per selected job. A lower explicit
+    count distributes jobs across those workers; a higher count is capped at the number of
+    jobs. The pool is closed before returning, so no worker can mutate batch state or
+    workflow YAML after the single-writer phase begins.
     """
     if not tasks:
         return []
-    cpu_count = os.cpu_count() or 1
-    worker_count = requested_workers or min(cpu_count, len(tasks))
-    worker_count = max(1, min(worker_count, len(tasks)))
+    worker_count = min(requested_workers or len(tasks), len(tasks))
     print(f"Transpiling {len(tasks)} item(s) with {worker_count} worker process(es)", flush=True)
+    if worker_count < len(tasks):
+        print(f"Distributing {len(tasks)} job(s) across {worker_count} transpiler worker(s)",
+              flush=True)
 
     results: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=worker_count) as pool:

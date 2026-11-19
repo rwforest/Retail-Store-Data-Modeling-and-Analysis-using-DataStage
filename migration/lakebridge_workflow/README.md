@@ -170,7 +170,7 @@ lakebridge-workflow migrate `
 |---|---|---|
 | `--jobs-per-file` | `500` | Jobs per XML chunk when splitting a `DSExport` |
 | `--workers` | Omitted; one worker per XML chunk | Analyzer workers. A lower explicit count distributes chunks across those workers |
-| `--transpile-workers` | `0` | Transpiler worker processes; `0` means automatic, bounded by available CPUs and selected-job count |
+| `--transpile-workers` | Omitted; one worker per selected job | Transpiler workers. A lower explicit count distributes jobs across those workers |
 | `--analysis-dir` | `<migration-root>/lakebridge_workflow_analysis` | Directory for chunks, worker reports, merged report, and hierarchy |
 | `--state-file` | `<migration-root>/migration_state.json` | Migration history file |
 | `--output-root` | `<migration-root>/migrated_batches` | Root directory for generated batches |
@@ -255,11 +255,11 @@ A selected root sequence is always migrated with its full descendant closure. If
 root closure is larger than `<target-new-items>`, the planner keeps the complete tree instead
 of cutting it in half.
 
-Parallel transpilation is controlled with `<transpiler-worker-count>`. Use `0` to select an
-automatic count bounded by available CPUs and the number of selected jobs. Each worker
-process independently compiles one job's notebook, copies its Switch specification, and
-creates its standalone XML. Workflow generation and migration-state updates remain
-single-writer operations.
+Parallel transpilation is controlled with `<transpiler-worker-count>`. When omitted, the
+workflow uses one worker per selected job. If a lower explicit count is supplied, jobs are
+distributed across those workers. Each worker process independently compiles one job's
+notebook, copies its Switch specification, and creates its standalone XML. Workflow
+generation and migration-state updates remain single-writer operations.
 
 The generated batch directory contains artifacts derived from the selected lineage:
 

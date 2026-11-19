@@ -21,8 +21,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--state-file", type=Path, default=root / "migration_state.json")
     p.add_argument("--output-root", type=Path, default=root / "migrated_batches")
     p.add_argument("--filter")
-    p.add_argument("--transpile-workers", type=int, default=0, metavar="N",
-                   help="Transpiler worker processes (0 = automatically use available CPUs)")
+    p.add_argument("--transpile-workers", type=int, default=None, metavar="N",
+                   help="Transpiler workers; omitted or 0 uses one per selected job. A lower "
+                        "explicit count distributes jobs across workers")
     p.add_argument("--reset-history", action="store_true")
     p.add_argument("--overwrite", action="store_true", help="Replace an existing batch directory")
     p.add_argument("--plan-only", action="store_true", help="Stop after the dry-run batch plan")
@@ -31,7 +32,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         p.error("--num-jobs is required")
     if args.num_jobs <= 0:
         p.error("--num-jobs must be positive")
-    if args.transpile_workers < 0:
+    if args.transpile_workers is not None and args.transpile_workers < 0:
         p.error("--transpile-workers must be zero or positive")
     return args
 
@@ -80,8 +81,9 @@ def run(args: argparse.Namespace) -> int:
         "--state-file", str(args.state_file),
         "--output-root", str(args.output_root),
         "--num-jobs", str(args.num_jobs),
-        "--workers", str(args.transpile_workers),
     ]
+    if args.transpile_workers is not None:
+        transpile_args += ["--workers", str(args.transpile_workers)]
     if args.filter:
         transpile_args += ["--filter", args.filter]
     if args.reset_history:

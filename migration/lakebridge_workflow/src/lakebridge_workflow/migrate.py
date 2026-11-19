@@ -33,8 +33,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Optional: analyzer workers; omitted uses one per XML chunk. A lower "
                         "explicit count distributes chunks across workers "
                         "(default: one per XML chunk)")
-    p.add_argument("--transpile-workers", type=int, default=0,
-                   help="Optional: transpiler worker processes; 0 means automatic (default: 0)")
+    p.add_argument("--transpile-workers", type=int, default=None,
+                   help="Optional: transpiler workers; omitted or 0 uses one per selected job. "
+                        "A lower explicit count distributes jobs across workers "
+                        "(default: one per selected job)")
     p.add_argument("--analysis-dir", type=Path, default=root / "lakebridge_workflow_analysis",
                    help="Optional: directory for chunks, reports, merged report, and hierarchy "
                         "(default: <migration-root>/lakebridge_workflow_analysis)")
@@ -64,7 +66,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         p.error("--jobs-per-file must be positive")
     if args.workers is not None and args.workers < 0:
         p.error("--workers must be zero or positive")
-    if args.transpile_workers < 0:
+    if args.transpile_workers is not None and args.transpile_workers < 0:
         p.error("--transpile-workers must be zero or positive")
     return args
 
@@ -214,8 +216,9 @@ def run(args: argparse.Namespace) -> int:
         "--state-file", str(args.state_file),
         "--output-root", str(args.output_root),
         "--num-jobs", str(args.num_jobs),
-        "--workers", str(args.transpile_workers),
     ]
+    if args.transpile_workers is not None:
+        transpile_args += ["--workers", str(args.transpile_workers)]
     if args.filter:
         transpile_args += ["--filter", args.filter]
     if args.reset_history:

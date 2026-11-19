@@ -726,6 +726,7 @@ wheel="$(ls -t lakebridge_workflow/dist/*.whl | head -n 1)"
 # Complete workflow from either a DSExport or a condensed-job directory.
 # Only --source and --num-jobs are required. Default chunk size: 500 jobs per XML chunk.
 # Analyzer workers default to one per XML chunk; a lower explicit count distributes chunks.
+# Transpiler workers default to one per selected job; a lower explicit count distributes jobs.
 # See migration/lakebridge_workflow/README.md for every optional flag and default.
 uv run --with "$wheel" \
   lakebridge-workflow migrate \
