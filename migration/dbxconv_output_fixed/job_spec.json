@@ -1,0 +1,417 @@
+{
+  "run_name": "retail_dw_dbxconv_verify",
+  "tasks": [
+    {
+      "task_key": "J01_Land_Orders",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J01_Land_Orders",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default"
+    },
+    {
+      "task_key": "J02_Land_Customers",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J02_Land_Customers",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default"
+    },
+    {
+      "task_key": "J03_Land_Products",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J03_Land_Products",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default"
+    },
+    {
+      "task_key": "J04_Land_Stores_Employees",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J04_Land_Stores_Employees",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default"
+    },
+    {
+      "task_key": "J05_Dim_Customer_Initial",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J05_Dim_Customer_Initial",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J06_Dim_Customer_SCD2",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J06_Dim_Customer_SCD2",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J05_Dim_Customer_Initial"
+        }
+      ]
+    },
+    {
+      "task_key": "J07_Dim_Product",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J07_Dim_Product",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J08_Dim_Store_Employee",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J08_Dim_Store_Employee",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J09_Dim_Date_Promo_FX",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J09_Dim_Date_Promo_FX",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J10_Fact_Sales",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J10_Fact_Sales",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J06_Dim_Customer_SCD2"
+        },
+        {
+          "task_key": "J07_Dim_Product"
+        },
+        {
+          "task_key": "J08_Dim_Store_Employee"
+        },
+        {
+          "task_key": "J09_Dim_Date_Promo_FX"
+        }
+      ]
+    },
+    {
+      "task_key": "J11_Fact_Returns",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J11_Fact_Returns",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J06_Dim_Customer_SCD2"
+        },
+        {
+          "task_key": "J07_Dim_Product"
+        },
+        {
+          "task_key": "J08_Dim_Store_Employee"
+        },
+        {
+          "task_key": "J09_Dim_Date_Promo_FX"
+        }
+      ]
+    },
+    {
+      "task_key": "J12_Fact_Invoice",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J12_Fact_Invoice",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J10_Fact_Sales"
+        }
+      ]
+    },
+    {
+      "task_key": "J13_Mart_RETAIL_DATA_MART",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J13_Mart_RETAIL_DATA_MART",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J14_Analysis_Employee_Transactions",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J14_Analysis_Employee_Transactions",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J13_Mart_RETAIL_DATA_MART"
+        }
+      ]
+    },
+    {
+      "task_key": "J15_Analysis_CustomerType_Profit",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J15_Analysis_CustomerType_Profit",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J13_Mart_RETAIL_DATA_MART"
+        }
+      ]
+    },
+    {
+      "task_key": "J16_Bonus_Program",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J16_Bonus_Program",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J13_Mart_RETAIL_DATA_MART"
+        }
+      ]
+    },
+    {
+      "task_key": "J17_Mart_Customer_360",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J17_Mart_Customer_360",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J18_Mart_Product_Performance",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J18_Mart_Product_Performance",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J19_Mart_Basket_Affinity",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J19_Mart_Basket_Affinity",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J20_Mart_Store_Monthly",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J20_Mart_Store_Monthly",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J21_Mart_Promo_Effectiveness",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J21_Mart_Promo_Effectiveness",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J22_DQ_Fact_Checks",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J22_DQ_Fact_Checks",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J23_Reconcile_Source_To_Fact",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J23_Reconcile_Source_To_Fact",
+        "base_parameters": {
+          "pSrcDir": "/Volumes/unitygo/retail_dw/landing"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    }
+  ],
+  "environments": [
+    {
+      "environment_key": "default",
+      "spec": {
+        "environment_version": "5",
+        "dependencies": []
+      }
+    }
+  ]
+}

@@ -86,7 +86,8 @@ lakebridge_workflow/
 │   ├── migrate.py
 │   ├── plan_migration_batch.py
 │   ├── transpile_batch.py
-│   └── run_dbxconv.py
+│   ├── run_dbxconv.py
+│   └── fix_dbxconv_output.py    # patches dbxconv's output so it actually runs (12 defects)
 └── dist/                        # built wheel artifacts
 ```
 
@@ -375,6 +376,7 @@ lakebridge-workflow analyze --source-directory <condensed-or-xml-source> --repor
 lakebridge-workflow build-hierarchy --input-json <report-prefix>.json --out-prefix <hierarchy-prefix>
 lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix <optimization-report-prefix>
 lakebridge-workflow triage-for-switch --optimization-json <optimization-report>.json --condensed-dir <condensed-dir> --out-dir <triaged-dir> --dry-run
+lakebridge-workflow fix-dbxconv --dbxconv-dir <run-dbxconv-output> --condensed-dir <condensed-dir> --catalog <catalog> --schema <schema> --out-dir <fixed-dir>
 lakebridge-workflow plan --num-jobs <target-new-items> --dry-run
 lakebridge-workflow transpile `
   --num-jobs <target-new-items> `
@@ -700,6 +702,61 @@ On Windows, use the wrapper:
   -Target <PYSPARK|SPARKSQL|DBSQL> `
   -PluginDir <plugin-dir>
 ```
+
+## Fixing `dbxconv`'s output for real execution
+
+`run-dbxconv`'s output is a literal, *unverified* lift-and-shift: nothing in this package
+checks that the generated code actually runs. It doesn't, not without patching -- deploying
+and running it against this repository's own 23 jobs (`migration/README.md` §8c) found 11
+of 23 SPARKSQL-target notebooks fail to even parse, and the other 12 would silently write
+wrong data: an unresolved column at write time, a lost date-format pattern, a row-count
+corrupted by a zero-precision numeric cast, and more. None of it is specific to this
+pipeline -- every defect traces to a gap in how BladeBridge's SPARKSQL config handles a
+particular DataStage construct (an Aggregator's actual function, a `TimestampToString`
+format, a header row, a quote-escaped CSV field, ...), the same gap for any source using
+it. `fix-dbxconv` fixes all twelve by reading the same condensed job specification the
+rest of this package already parses, not by hand-patching generated code:
+
+```powershell
+lakebridge-workflow fix-dbxconv `
+  --dbxconv-dir <run-dbxconv's --output directory> `
+  --condensed-dir <the same jobs' condensed .txt specs> `
+  --catalog <unity-catalog-catalog> `
+  --schema <unity-catalog-schema> `
+  --out-dir <fixed-notebooks-dir>
+```
+
+It writes one `.py` file per job to `--out-dir`, plus a JSON/CSV report (`<out-dir
+parent>/<out-dir name>_report.{json,csv}`) counting how many of each fix applied per job
+and flagging any job that still fails to parse. The module docstring in
+`fix_dbxconv_output.py` is the full list, each fix independently callable and reported;
+the short version:
+
+| # | Fix | What it's for |
+|---|---|---|
+| 1 | `fix_blank_attribute_refs` | Deletes a duplicate, syntax-breaking column reference after an Aggregator |
+| 2 | `fix_source_read_paths` | Resolves the never-substituted read path, fixes the header option, adds the quote-escape option, and reads what an earlier job wrote as a Delta table instead of a CSV file that was never written |
+| 3 | `fix_head_stages` | Implements `PxHead` (Top-N), which has no handler at all |
+| 4 | `fix_timestamp_to_string_format` | Restores a `TimestampToString` format BladeBridge drops entirely |
+| 5 | `fix_date_format_pattern_case` | Fixes the letter-casing on a `DateToString`-derived `date_format()` pattern |
+| 6 | `fix_string_to_date_cast` | Restores a `StringToDate` format, same class of defect as #4 |
+| 7 | `fix_bare_numeric_cast` | Gives a `StringToDecimal`-derived `CAST(x AS numeric)` its real precision/scale instead of Spark's zero-decimal-place default |
+| 8 | `fix_nonnullable_string_coalesce` | DataStage's empty-string-vs-NULL semantics (the same defect §4 #2 documents for the other two implementations) |
+| 9 | `fix_csv_writes_to_delta` | Rewrites every raw `.csv()` write into a `saveAsTable` Delta write |
+| 10 | `fix_aggregator_functions` | Replaces BladeBridge's always-`MIN()` Aggregator output with the function the DataStage stage actually specifies |
+| 11 | `fix_numeric_casts` | Casts every numeric source column to its declared type, which BladeBridge only does when the original expression already had a function call |
+
+Three of the twelve underlying defects (not eleven -- fix #2 covers four on one line) were
+only found by actually deploying the fixed notebooks and running them, not by reading the
+generated code: the quote-escape option, the intermediate-read-as-CSV defect (which fails
+with an opaque Databricks platform error, not a Python exception), and the second shape of
+the `TimestampToString` defect (found by reconciling the result against an independent
+implementation and tracing a wrong value back to its source). `migration/README.md` §8c
+has the full table, the deployment result (23/23 tasks succeed), and the reconciliation
+result against the SDP implementation.
+
+Scoped to the SPARKSQL target specifically -- it has not been run against `PYSPARK` or
+`DBSQL` output, which have at least some different defects of their own.
 
 ## Validation
 

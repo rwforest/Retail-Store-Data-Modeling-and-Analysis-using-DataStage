@@ -1,0 +1,452 @@
+{
+  "summary": {
+    "jobsPatched": 23,
+    "jobsStillBroken": 0,
+    "totalBlankAttributeRefs": 10,
+    "totalResolvedSourcePaths": 50,
+    "totalHeadStages": 5,
+    "totalTimestampFormats": 3,
+    "totalDateFormatCases": 4,
+    "totalStringToDateCasts": 9,
+    "totalBareNumericCasts": 5,
+    "totalAggregatorFunctions": 41,
+    "totalNumericCasts": 1600,
+    "totalCoalesceWraps": 1359,
+    "totalDeltaWrites": 42
+  },
+  "jobs": [
+    {
+      "job": "J01_Land_Orders",
+      "blankAttributeRefs": 1,
+      "resolvedSourcePaths": 1,
+      "headStages": 0,
+      "timestampFormats": 1,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 3,
+      "aggregatorFunctions": 1,
+      "numericCasts": 105,
+      "coalesceWraps": 109,
+      "deltaWrites": 4,
+      "tables": [
+        "rej_orders",
+        "dq_order_anomalies",
+        "stg_orders",
+        "audit_land_orders"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J02_Land_Customers",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 2,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 0,
+      "numericCasts": 44,
+      "coalesceWraps": 68,
+      "deltaWrites": 2,
+      "tables": [
+        "stg_customers_2010",
+        "stg_customers_2011"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J03_Land_Products",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 0,
+      "numericCasts": 42,
+      "coalesceWraps": 81,
+      "deltaWrites": 2,
+      "tables": [
+        "stg_active_products",
+        "stg_products"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J04_Land_Stores_Employees",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 2,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 1,
+      "numericCasts": 11,
+      "coalesceWraps": 39,
+      "deltaWrites": 2,
+      "tables": [
+        "stg_employees",
+        "stg_stores"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J05_Dim_Customer_Initial",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 1,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 0,
+      "numericCasts": 26,
+      "coalesceWraps": 21,
+      "deltaWrites": 1,
+      "tables": [
+        "dim_customer"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J06_Dim_Customer_SCD2",
+      "blankAttributeRefs": 1,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 1,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 2,
+      "aggregatorFunctions": 1,
+      "numericCasts": 239,
+      "coalesceWraps": 206,
+      "deltaWrites": 2,
+      "tables": [
+        "audit_scd2_customer",
+        "dim_customer_next"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J07_Dim_Product",
+      "blankAttributeRefs": 1,
+      "resolvedSourcePaths": 1,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 1,
+      "numericCasts": 37,
+      "coalesceWraps": 73,
+      "deltaWrites": 2,
+      "tables": [
+        "dim_product",
+        "audit_products_by_category"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J08_Dim_Store_Employee",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 0,
+      "numericCasts": 23,
+      "coalesceWraps": 35,
+      "deltaWrites": 2,
+      "tables": [
+        "dim_store",
+        "dim_employee"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J09_Dim_Date_Promo_FX",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 4,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 3,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 0,
+      "numericCasts": 24,
+      "coalesceWraps": 18,
+      "deltaWrites": 3,
+      "tables": [
+        "dim_date",
+        "dim_promotion",
+        "dim_fx"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J10_Fact_Sales",
+      "blankAttributeRefs": 3,
+      "resolvedSourcePaths": 6,
+      "headStages": 0,
+      "timestampFormats": 1,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 2,
+      "numericCasts": 233,
+      "coalesceWraps": 197,
+      "deltaWrites": 3,
+      "tables": [
+        "dq_orphan_products",
+        "fact_sales",
+        "audit_fact_by_month"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J11_Fact_Returns",
+      "blankAttributeRefs": 2,
+      "resolvedSourcePaths": 3,
+      "headStages": 0,
+      "timestampFormats": 1,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 1,
+      "numericCasts": 71,
+      "coalesceWraps": 60,
+      "deltaWrites": 2,
+      "tables": [
+        "fact_returns",
+        "audit_returns_by_category"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J12_Fact_Invoice",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 1,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 4,
+      "numericCasts": 44,
+      "coalesceWraps": 10,
+      "deltaWrites": 1,
+      "tables": [
+        "fact_invoice"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J13_Mart_RETAIL_DATA_MART",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 4,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 0,
+      "numericCasts": 134,
+      "coalesceWraps": 95,
+      "deltaWrites": 1,
+      "tables": [
+        "RETAIL_DATA_MART"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J14_Analysis_Employee_Transactions",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 1,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 1,
+      "numericCasts": 62,
+      "coalesceWraps": 46,
+      "deltaWrites": 2,
+      "tables": [
+        "Q1_Employee_Transactions",
+        "Q1_Top10_Employees"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J15_Analysis_CustomerType_Profit",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 1,
+      "headStages": 1,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 3,
+      "numericCasts": 15,
+      "coalesceWraps": 7,
+      "deltaWrites": 2,
+      "tables": [
+        "Q2_CustomerType_Profit",
+        "Q2_Winning_CustomerType"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J16_Bonus_Program",
+      "blankAttributeRefs": 1,
+      "resolvedSourcePaths": 2,
+      "headStages": 1,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 2,
+      "numericCasts": 42,
+      "coalesceWraps": 34,
+      "deltaWrites": 2,
+      "tables": [
+        "Q3_Bonus_Program",
+        "Q3_Bonus_Summary"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J17_Mart_Customer_360",
+      "blankAttributeRefs": 1,
+      "resolvedSourcePaths": 3,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 5,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 7,
+      "numericCasts": 160,
+      "coalesceWraps": 49,
+      "deltaWrites": 2,
+      "tables": [
+        "Customer_360",
+        "Customer_Segments"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J18_Mart_Product_Performance",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 3,
+      "headStages": 1,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 4,
+      "numericCasts": 73,
+      "coalesceWraps": 30,
+      "deltaWrites": 2,
+      "tables": [
+        "Product_Performance",
+        "Product_Top50"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J19_Mart_Basket_Affinity",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 1,
+      "headStages": 1,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 1,
+      "numericCasts": 16,
+      "coalesceWraps": 40,
+      "deltaWrites": 1,
+      "tables": [
+        "Basket_Affinity"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J20_Mart_Store_Monthly",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 3,
+      "numericCasts": 34,
+      "coalesceWraps": 18,
+      "deltaWrites": 1,
+      "tables": [
+        "Store_Monthly"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J21_Mart_Promo_Effectiveness",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 3,
+      "numericCasts": 37,
+      "coalesceWraps": 16,
+      "deltaWrites": 1,
+      "tables": [
+        "Promo_Effectiveness"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J22_DQ_Fact_Checks",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 1,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 4,
+      "numericCasts": 107,
+      "coalesceWraps": 91,
+      "deltaWrites": 1,
+      "tables": [
+        "dq_fact_checks"
+      ],
+      "syntaxError": ""
+    },
+    {
+      "job": "J23_Reconcile_Source_To_Fact",
+      "blankAttributeRefs": 0,
+      "resolvedSourcePaths": 2,
+      "headStages": 0,
+      "timestampFormats": 0,
+      "dateFormatCases": 0,
+      "stringToDateCasts": 0,
+      "bareNumericCasts": 0,
+      "aggregatorFunctions": 2,
+      "numericCasts": 21,
+      "coalesceWraps": 16,
+      "deltaWrites": 1,
+      "tables": [
+        "audit_reconciliation"
+      ],
+      "syntaxError": ""
+    }
+  ]
+}

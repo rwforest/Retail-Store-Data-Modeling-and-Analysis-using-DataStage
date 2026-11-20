@@ -12,6 +12,7 @@ COMMAND_MODULES = {
     "analyze": "analyze",
     "analyze-parallel": "analyze_parallel",
     "build-hierarchy": "build_hierarchy",
+    "fix-dbxconv": "fix_dbxconv_output",
     "merge-reports": "merge_reports",
     "migrate": "migrate",
     "optimize": "optimize",

@@ -61,7 +61,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from .common import atomic_json, now_utc, write_xlsx
+from .common import atomic_json, now_utc, unwrap_dsx_value, write_xlsx
 
 # --- Heuristic patterns -----------------------------------------------------------------
 # Property names/values that spell out a full overwrite. Covers both this repository's
@@ -125,25 +125,6 @@ SQL_SUBQUERY_IN_WHERE_RE = re.compile(r"(?i)where\b[^;]*\(\s*select\b", re.DOTAL
 # not mean identical *value*, so these must never be treated as a duplicate/common
 # subexpression (see find_repeated_expressions_within_job).
 ROW_CONTEXT_MACRO_RE = re.compile(r"@INROWNUM|@PARTITIONNUM|@NUMPARTITIONS", re.IGNORECASE)
-
-# dsx_condense.py renders some condensed properties (``where``, ``key``, ...) verbatim from
-# the DSX export's raw Value field, which for these is DataStage's own BASIC/UniVerse
-# multi-value list encoding (``\(1)``/``\(2)``/``\(3)`` are its field/value/subvalue marks)
-# rather than plain text -- see migration/README.md §8a.7 on how little is documented about
-# this format. Unwrap the common single-value shape so a human reading a report sees the
-# real predicate; a multi-value shape (several marks in the same property, e.g. a
-# multi-column join key) is left exactly as condensed, since mangling that silently would be
-# worse than showing the raw text.
-DSX_PROPERTY_WRAPPER_RE = re.compile(
-    r"^\\\(2\)\\\(2\)0\\\(1\)\\\(3\)\w+\\\(2\)(?P<value>(?:(?!\\\(1\)).)*)\\\(2\)0$",
-    re.IGNORECASE | re.DOTALL,
-)
-
-
-def _unwrap_dsx_value(value: str) -> str:
-    match = DSX_PROPERTY_WRAPPER_RE.match(value.strip())
-    return match.group("value") if match else value
-
 
 BANDS = (("HIGH", 8), ("MEDIUM", 4), ("LOW", 1))
 
@@ -248,7 +229,7 @@ def find_duplicate_queries(embedded_sql: list[dict[str, Any]], attributes: list[
     sql_occurrences = [{"job": str(r.get("job") or ""), "stage": str(r.get("stage") or ""),
                         "text": str(r.get("sql") or "")} for r in embedded_sql]
     filter_occurrences = [{"job": str(r.get("job") or ""), "stage": str(r.get("stage") or ""),
-                           "text": _unwrap_dsx_value(str(r.get("value") or ""))}
+                           "text": unwrap_dsx_value(str(r.get("value") or ""))}
                           for r in attributes if WHERE_PROP_NAME_RE.match(str(r.get("name") or ""))]
     expression_occurrences = [{"job": str(r.get("job") or ""), "stage": str(r.get("transformation") or ""),
                                "text": str(r.get("expression") or "")} for r in expressions]
@@ -307,7 +288,7 @@ def find_nonsargable_predicates(attributes: list[dict[str, Any]],
     for row in attributes:
         if not WHERE_PROP_NAME_RE.match(str(row.get("name") or "")):
             continue
-        predicate = _unwrap_dsx_value(str(row.get("value") or ""))
+        predicate = unwrap_dsx_value(str(row.get("value") or ""))
         if NONSARGABLE_FUNC_RE.search(predicate):
             out.append({
                 "job": row.get("job"), "stage": row.get("stage"), "kind": "filter_predicate",
@@ -340,7 +321,7 @@ def find_or_heavy_predicates(attributes: list[dict[str, Any]],
     for row in attributes:
         if not WHERE_PROP_NAME_RE.match(str(row.get("name") or "")):
             continue
-        predicate = _unwrap_dsx_value(str(row.get("value") or ""))
+        predicate = unwrap_dsx_value(str(row.get("value") or ""))
         count = len(OR_COUNT_RE.findall(predicate))
         if count >= MIN_OR_COUNT:
             out.append({

@@ -139,8 +139,12 @@ def convert_one(source: Path, output_root: Path, plugin_root: Path, converter: P
     out_dir.mkdir()
     shutil.copy2(source, originals / source.name)
 
+    # The DataStage configs live one level down, in Configs/Datastage/, even though the
+    # binary itself is pointed at the parent Configs/ via BB_CONFIG_CONVERTER_DIR below
+    # (which matches dbxconv's own documented invocation, migration/README.md §8a.2) --
+    # only this existence check needs the extra subdirectory.
     configs = converter / "Configs"
-    config_file = configs / CONFIG_BY_TARGET[target]
+    config_file = configs / "Datastage" / CONFIG_BY_TARGET[target]
     if not config_file.is_file():
         raise SystemExit(f"error: BladeBridge config not found: {config_file}")
     args = [

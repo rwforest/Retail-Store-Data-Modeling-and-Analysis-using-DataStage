@@ -264,6 +264,30 @@ def is_backup_name(name: str) -> bool:
     return bool(BACKUP_RE.search(name))
 
 
+# dsx_condense.py renders some condensed properties (``where``, ``key``, ...) verbatim from
+# the DSX export's raw Value field, which for these is DataStage's own BASIC/UniVerse
+# multi-value list encoding (``\(1)``/``\(2)``/``\(3)`` are its field/value/subvalue marks)
+# rather than plain text -- see migration/README.md §8a.7 on how little is documented about
+# this format. Unwrap the common single-value shape so callers see the real value; a
+# multi-value shape (several marks in the same property, e.g. a multi-column join key) is
+# left exactly as condensed, since mangling that silently would be worse than returning the
+# raw text unchanged. Shared by optimize.py (report readability) and fix_dbxconv_output.py
+# (it needs the real file path / sort key out of these same properties to patch generated
+# code, not just display it). The inner tag name is sometimes followed by a stray space
+# before its closing mark (seen on a Sequential File source link's own "file" property,
+# not on an otherwise-identical target link's) -- an inconsistency in the raw DSX itself,
+# not a condensing bug, so the pattern tolerates it rather than requiring either shape.
+DSX_PROPERTY_WRAPPER_RE = re.compile(
+    r"^\\\(2\)\\\(2\)0\\\(1\)\\\(3\)\w+ ?\\\(2\)(?P<value>(?:(?!\\\(1\)).)*)\\\(2\)0$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def unwrap_dsx_value(value: str) -> str:
+    match = DSX_PROPERTY_WRAPPER_RE.match(value.strip())
+    return match.group("value") if match else value
+
+
 # Minimal SpreadsheetML writer.  This avoids a hard dependency on openpyxl and emits
 # ordinary inline-string cells, which Excel, Numbers and pandas can read.
 _NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
