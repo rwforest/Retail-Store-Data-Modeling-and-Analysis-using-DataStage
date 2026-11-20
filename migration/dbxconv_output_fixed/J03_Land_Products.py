@@ -99,13 +99,13 @@ coalesce(lnk_std_prod.supplier_id, '') as supplier_id,
 coalesce(lnk_std_prod.status, '') as status,
 CAST(lnk_std_prod.unit_cost AS decimal(18,2)) as unit_cost,
 coalesce(lnk_std_prod.price_band, '') as price_band,
-coalesce(lnk_std_sup.supplier_name, '') as supplier_name,
-coalesce(lnk_std_sup.supplier_country, '') as supplier_country,
+lnk_std_sup.supplier_name as supplier_name,
+lnk_std_sup.supplier_country as supplier_country,
 CAST(lnk_std_sup.lead_time_days AS int) as lead_time_days,
 CAST(lnk_std_sup.reliability_score AS decimal(18,2)) as reliability_score
 FROM
 lnk_std_prod
-LEFT JOIN lnk_std_sup ON coalesce(lnk_std_prod.supplier_id, '') = coalesce(lnk_std_sup.supplier_id, '')""")
+LEFT JOIN lnk_std_sup ON coalesce(lnk_std_prod.supplier_id, '') = lnk_std_sup.supplier_id""")
 lnk_prod_sup.createOrReplaceTempView("lnk_prod_sup")
 
 

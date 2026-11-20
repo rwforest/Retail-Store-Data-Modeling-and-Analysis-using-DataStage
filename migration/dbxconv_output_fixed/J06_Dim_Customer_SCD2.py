@@ -200,16 +200,16 @@ coalesce(lnk_snap.city, '') as city,
 lnk_snap.snapshot_date as snapshot_date,
 CAST(lnk_snap.attr_hash AS bigint) as attr_hash,
 CAST(lnk_old.old_customer_sk AS int) as old_customer_sk,
-coalesce(lnk_old.old_cust_name, '') as old_cust_name,
-coalesce(lnk_old.old_gender, '') as old_gender,
+lnk_old.old_cust_name as old_cust_name,
+lnk_old.old_gender as old_gender,
 CAST(lnk_old.old_age AS int) as old_age,
 CAST(lnk_old.old_spending_score AS int) as old_spending_score,
 CAST(lnk_old.old_annual_income_k AS int) as old_annual_income_k,
-coalesce(lnk_old.old_country, '') as old_country,
-coalesce(lnk_old.old_customer_type, '') as old_customer_type,
-coalesce(lnk_old.old_loyalty_tier, '') as old_loyalty_tier,
-coalesce(lnk_old.old_email, '') as old_email,
-coalesce(lnk_old.old_city, '') as old_city,
+lnk_old.old_country as old_country,
+lnk_old.old_customer_type as old_customer_type,
+lnk_old.old_loyalty_tier as old_loyalty_tier,
+lnk_old.old_email as old_email,
+lnk_old.old_city as old_city,
 CAST(lnk_old.old_attr_hash AS bigint) as old_attr_hash,
 CAST(lnk_old.old_version_no AS int) as old_version_no,
 CAST(lnk_old.old_eff_start_key AS int) as old_eff_start_key,
@@ -581,7 +581,7 @@ coalesce(lnk_changed.old_city, '') as city,
 CAST(lnk_changed.old_attr_hash AS bigint) as attr_hash,
 CAST(lnk_changed.old_version_no AS int) as version_no,
 CAST(lnk_changed.old_eff_start_key AS int) as eff_start_key,
-CAST(REGEXP_REPLACE(date_format(date_add(cast('{pEffDate}' as date),1), 'yyyy-MM-dd'), '-', '') as int) as eff_end_key,
+CAST(REGEXP_REPLACE(date_format(date_add(cast('{pEffDate}' as date), -1), 'yyyy-MM-dd'), '-', '') as int) as eff_end_key,
 0 as is_current
 FROM
 lnk_changed""")
@@ -648,7 +648,67 @@ CAST(lnk_history.version_no AS int) as version_no,
 CAST(lnk_history.eff_start_key AS int) as eff_start_key,
 CAST(lnk_history.eff_end_key AS int) as eff_end_key,
 CAST(lnk_history.is_current AS int) as is_current
-FROM lnk_history""")
+FROM lnk_history
+UNION ALL
+SELECT
+CAST(lnk_carry.customer_sk AS int) as customer_sk,
+CAST(lnk_carry.customer_id AS int) as customer_id,
+coalesce(lnk_carry.cust_name, '') as cust_name,
+coalesce(lnk_carry.gender, '') as gender,
+CAST(lnk_carry.age AS int) as age,
+CAST(lnk_carry.spending_score AS int) as spending_score,
+CAST(lnk_carry.annual_income_k AS int) as annual_income_k,
+coalesce(lnk_carry.country, '') as country,
+coalesce(lnk_carry.customer_type, '') as customer_type,
+coalesce(lnk_carry.loyalty_tier, '') as loyalty_tier,
+coalesce(lnk_carry.email, '') as email,
+coalesce(lnk_carry.city, '') as city,
+CAST(lnk_carry.attr_hash AS bigint) as attr_hash,
+CAST(lnk_carry.version_no AS int) as version_no,
+CAST(lnk_carry.eff_start_key AS int) as eff_start_key,
+CAST(lnk_carry.eff_end_key AS int) as eff_end_key,
+CAST(lnk_carry.is_current AS int) as is_current
+FROM lnk_carry
+UNION ALL
+SELECT
+CAST(lnk_expired.customer_sk AS int) as customer_sk,
+CAST(lnk_expired.customer_id AS int) as customer_id,
+coalesce(lnk_expired.cust_name, '') as cust_name,
+coalesce(lnk_expired.gender, '') as gender,
+CAST(lnk_expired.age AS int) as age,
+CAST(lnk_expired.spending_score AS int) as spending_score,
+CAST(lnk_expired.annual_income_k AS int) as annual_income_k,
+coalesce(lnk_expired.country, '') as country,
+coalesce(lnk_expired.customer_type, '') as customer_type,
+coalesce(lnk_expired.loyalty_tier, '') as loyalty_tier,
+coalesce(lnk_expired.email, '') as email,
+coalesce(lnk_expired.city, '') as city,
+CAST(lnk_expired.attr_hash AS bigint) as attr_hash,
+CAST(lnk_expired.version_no AS int) as version_no,
+CAST(lnk_expired.eff_start_key AS int) as eff_start_key,
+CAST(lnk_expired.eff_end_key AS int) as eff_end_key,
+CAST(lnk_expired.is_current AS int) as is_current
+FROM lnk_expired
+UNION ALL
+SELECT
+CAST(lnk_newver.customer_sk AS int) as customer_sk,
+CAST(lnk_newver.customer_id AS int) as customer_id,
+coalesce(lnk_newver.cust_name, '') as cust_name,
+coalesce(lnk_newver.gender, '') as gender,
+CAST(lnk_newver.age AS int) as age,
+CAST(lnk_newver.spending_score AS int) as spending_score,
+CAST(lnk_newver.annual_income_k AS int) as annual_income_k,
+coalesce(lnk_newver.country, '') as country,
+coalesce(lnk_newver.customer_type, '') as customer_type,
+coalesce(lnk_newver.loyalty_tier, '') as loyalty_tier,
+coalesce(lnk_newver.email, '') as email,
+coalesce(lnk_newver.city, '') as city,
+CAST(lnk_newver.attr_hash AS bigint) as attr_hash,
+CAST(lnk_newver.version_no AS int) as version_no,
+CAST(lnk_newver.eff_start_key AS int) as eff_start_key,
+CAST(lnk_newver.eff_end_key AS int) as eff_end_key,
+CAST(lnk_newver.is_current AS int) as is_current
+FROM lnk_newver""")
 lnk_all_versions.createOrReplaceTempView("lnk_all_versions")
 
 

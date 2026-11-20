@@ -1,6 +1,6 @@
 ---
 name: datastage-databricks-migration-lessons
-description: Lessons learned migrating DataStage to Databricks in this repo (migration/) -- debugging methodology, BladeBridge/dbxconv's 12 systematic output defects and their generalized fixes, Spark/PySpark/Databricks gotchas, and safety rules for scoping work to an LLM transpiler (Lakebridge Switch). Use before touching dbxconv/BladeBridge conversion output, fix_dbxconv_output.py, triage_for_switch.py, optimize.py, or common.py; before debugging a DataStage-derived Spark job that runs but produces wrong data, or one that fails with an opaque platform error; before deploying/reconciling two independently-produced implementations of the same pipeline; or before deciding what to send to an LLM-based transpiler at scale.
+description: Lessons learned migrating DataStage to Databricks in this repo (migration/) -- debugging methodology, BladeBridge/dbxconv's 14 systematic output defects and their generalized fixes, a self-correction lesson about this repo's own fixer tooling (outer-join coalescing), Spark/PySpark/Databricks gotchas, and safety rules for scoping work to an LLM transpiler (Lakebridge Switch). Use before touching dbxconv/BladeBridge conversion output, fix_dbxconv_output.py, triage_for_switch.py, optimize.py, or common.py; before debugging a DataStage-derived Spark job that runs but produces wrong data, or one that fails with an opaque platform error; before deploying/reconciling two independently-produced implementations of the same pipeline; or before deciding what to send to an LLM-based transpiler at scale.
 ---
 
 # DataStage -> Databricks migration: lessons learned
@@ -14,7 +14,7 @@ model in `lakebridge_workflow/src/lakebridge_workflow/common.py`
 first -- every fixer/analyzer in this package parses jobs the same way; don't invent a second
 parser.
 
-Full writeups: `migration/README.md` §8c (dbxconv's 12 defects, deployment, reconciliation),
+Full writeups: `migration/README.md` §8c (dbxconv's 14 defects, deployment, reconciliation),
 §7.3-7.4 (SDP lessons), §6 (reconciliation caveats), §8 (open items);
 `migration/lakebridge_workflow/README.md` (per-tool docs, complexity/optimization scoring).
 This skill is the condensed, reusable version -- read the README sections above for full
@@ -23,11 +23,35 @@ narrative and numbers.
 ## Debugging methodology that actually found real bugs here
 
 - **Reading the generated code finds most defects; running it finds the rest.** Of dbxconv's
-  12 systematic defects, 9 were visible just by reading the generated Python/SQL. The other 3
-  (CSV escape-char default, a second shape of a timestamp-format bug, a bare numeric cast
-  defaulting to `DECIMAL(10,0)`) only showed up as *wrong data on reconciliation*, not an
-  error. Don't stop at "it parses" or even "it ran with no exception" -- reconcile output
-  against a second independent implementation before trusting it.
+  14 systematic defects, 9 were visible just by reading the generated Python/SQL. The other 5
+  (CSV escape-char default, a second shape of a timestamp-format bug, a `DateFromDaysSince`
+  sign/offset dropped entirely, a `Funnel` stage silently reading only its first input link,
+  and a bare numeric cast defaulting to `DECIMAL(10,0)`) only showed up as *wrong data on
+  reconciliation*, not an error. Don't stop at "it parses" or even "it ran with no exception"
+  -- reconcile output against a second independent implementation before trusting it.
+- **A fixer that defaults NULL-to-something can mask a NULL a later stage still needs.**
+  `fix_nonnullable_string_coalesce` blanket-wrapped every reference to a column declared
+  non-nullable in `coalesce(x, '')` -- correct for a plain table read, wrong for a column
+  coming from the *non-preserving side of an outer join*: that reference can legitimately be
+  `NULL` regardless of the column's own declared nullability, and this repo's own pipelines
+  immediately follow such a join with their own `COALESCE(..., '<real default>')` for exactly
+  that reason. Coalescing to `''` one stage early meant the join's own default (`'unknown'`,
+  `'NONE'`, `'Unknown'`) never fired. The fix: derive which in-links are a join's nullable
+  side from the DSX (`operator` property + in-link declaration order: `leftouterjoin`'s
+  2nd-and-later in-links, `rightouterjoin`'s 1st, every in-link of a `fullouterjoin`) and
+  exclude them from the blanket wrap entirely. General lesson: before wrapping *every*
+  textual reference to a column in a NULL-handling fix, check whether some of those
+  references are the output of an outer join -- a join can produce a `NULL` a plain column
+  read never would, independent of the column's declared nullability.
+- **A redeployment can be 100% code-correct and still produce wrong data if the deployed job
+  graph is incomplete.** `dim_customer` stayed frozen at its initial load (and every
+  downstream fact/mart table inherited stale customer attributes) not because any generated
+  code was wrong, but because the one-time validation job spec omitted `promote_dim_customer`
+  -- a plain `CREATE OR REPLACE TABLE ... AS SELECT * FROM dim_customer_next` step that every
+  *other* implementation's bundle already had wired in, unconditionally, right after the SCD2
+  job. When a job's correctness depends on a promote/publish step that isn't one of the
+  converter's own generated notebooks, check it's actually in the deployed graph before
+  trusting a "the code is correct" conclusion from unit-level checks alone.
 - **Isolate before trusting a concurrency theory.** An opaque, 100%-reproducible
   `INTERNAL_ERROR` on 3 of 23 tasks looked like resource contention (all 3 started within
   ~300ms of each other). It wasn't -- resubmitting one of them completely alone reproduced the
@@ -60,7 +84,7 @@ narrative and numbers.
   was extracted into an isolated `/tmp/bb_work/` directory, never alongside this package's
   source.
 
-## BladeBridge `dbxconv`'s 12 systematic output defects (SPARKSQL target)
+## BladeBridge `dbxconv`'s 14 systematic output defects (SPARKSQL target)
 
 All fixed generically in
 [`fix_dbxconv_output.py`](../../migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_output.py)
@@ -77,12 +101,22 @@ hand-patching generated text. Full table with "found by" column: README §8c.
 8. The same function has a second generated shape (`CAST(bare_timestamp_col AS STRING)`, no `to_timestamp(` wrapper) that the first fix for #7 didn't match -- caused a silently-broken FX-rate join key downstream.
 9. `DateToString(date, fmt)` becomes `date_format(...)` correctly, but the pattern is emitted all upper-case (`'YYYYMMDD'`) -- Spark 3.0+ rejects mixing capital `Y` (week-based-year) with a bare month.
 10. `StringToDate(value, fmt)` loses its format the same way `TimestampToString` does, becoming a bare `CAST(value AS date)` -- works by luck on ISO-formatted input, breaks on `yyyyMMdd`.
-11. `StringToDecimal(x)` (no explicit precision) becomes a bare `CAST(x AS numeric)` -- Spark's default is `DECIMAL(10,0)`, silently truncating every decimal place of a real money value.
-12. Aggregator output is always `MIN(...)` regardless of the stage's actual `selection`/`reduce` property -- wrong aggregate with no error for `sum`/others, an unresolved-column runtime error for `count`.
+11. `DateFromDaysSince(N, date)` (date plus N, possibly negative, days) always becomes `date_add(expr, 1)` -- BladeBridge drops the derivation's real `N` entirely, not just its sign. A `DateFromDaysSince(-1, pEffDate)` meant to expire an old SCD2 row the day *before* its replacement starts came out adding a day instead, a one-day overlap between old and new versions.
+12. `StringToDecimal(x)` (no explicit precision) becomes a bare `CAST(x AS numeric)` -- Spark's default is `DECIMAL(10,0)`, silently truncating every decimal place of a real money value.
+13. Aggregator output is always `MIN(...)` regardless of the stage's actual `selection`/`reduce` property -- wrong aggregate with no error for `sum`/others, an unresolved-column runtime error for `count`.
+14. `Funnel` (DataStage's N-input `UNION ALL`, one shared schema across inputs) only ever reads its first input link -- `SELECT ... FROM <first link>`, silently dropping the rest, no error of any kind. A 4-input customer-SCD2 Funnel (history/carried-forward/expired/new-version) came out as just the history branch, so the dimension never grew past its initial load.
+
+**Not a 15th defect, but closely related and worth knowing before touching this fixer
+again:** fix #9's own `fix_nonnullable_string_coalesce` had a scoping bug of its own (not a
+BladeBridge defect -- BladeBridge's raw output for the affected lines was already correct)
+that masked the real default on the non-preserving side of an outer join. See the
+debugging-methodology bullet above ("a fixer that defaults NULL-to-something can mask a
+NULL a later stage still needs") for the full lesson; `outer_join_nullable_links` in
+`fix_dbxconv_output.py` is the fix.
 
 **Scope note:** this fixer targets the SPARKSQL `dbxconv` target only. PYSPARK/DBSQL targets
 have at least some different defects (a bare unquoted `sep` identifier, a write path missing
-its `f`-string prefix, seen but not pursued) -- don't assume the same 12 fixes apply unchanged
+its `f`-string prefix, seen but not pursued) -- don't assume the same 14 fixes apply unchanged
 if you switch targets; re-derive from scratch by reading that target's generated code first.
 
 ## Spark / PySpark / Databricks gotchas (general, not dbxconv-specific)
@@ -159,12 +193,14 @@ candidate's correctness depends on sibling jobs before marking it independently 
   optimization scoring (truncate/reload, SCD2, duplicate queries, missing filters, and more).
 - `migration/lakebridge_workflow/src/lakebridge_workflow/triage_for_switch.py` -- scopes the
   expensive LLM pass; enforces the SCD2 bundling-safety rule above.
-- `migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_output.py` -- the 12-defect
+- `migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_output.py` -- the 14-defect
   fixer described above.
 - `migration/lakebridge_workflow/src/lakebridge_workflow/run_dbxconv.py` -- invokes the
   BladeBridge `dbxconv` binary (installed via `pip`/`uv` as the `databricks-bb-plugin` package,
   not a manual download).
-- `migration/dbxconv_output_fixed/` -- the 23 fixed/deployed notebooks, job spec, reconciliation
-  notebook and result, checked in as evidence (same convention as `switch_output*/`).
+- `migration/dbxconv_output_fixed/` -- the 23 fixed/deployed notebooks, job spec (24 tasks --
+  includes `promote_dim_customer`), reconciliation notebook and result (41/42 tables match;
+  the one holdout is `basket_affinity`'s pre-existing tie-break non-determinism), checked in
+  as evidence (same convention as `switch_output*/`).
 - `migration/README.md` §8c -- full narrative, numbers, and the "what this does and doesn't
   prove" framing to reuse when reporting any reconciliation result.

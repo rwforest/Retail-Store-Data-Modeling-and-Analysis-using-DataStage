@@ -87,7 +87,7 @@ lakebridge_workflow/
 │   ├── plan_migration_batch.py
 │   ├── transpile_batch.py
 │   ├── run_dbxconv.py
-│   └── fix_dbxconv_output.py    # patches dbxconv's output so it actually runs (12 defects)
+│   └── fix_dbxconv_output.py    # patches dbxconv's output so it actually runs (14 defects)
 └── dist/                        # built wheel artifacts
 ```
 
@@ -714,7 +714,7 @@ corrupted by a zero-precision numeric cast, and more. None of it is specific to 
 pipeline -- every defect traces to a gap in how BladeBridge's SPARKSQL config handles a
 particular DataStage construct (an Aggregator's actual function, a `TimestampToString`
 format, a header row, a quote-escaped CSV field, ...), the same gap for any source using
-it. `fix-dbxconv` fixes all twelve by reading the same condensed job specification the
+it. `fix-dbxconv` fixes all fourteen by reading the same condensed job specification the
 rest of this package already parses, not by hand-patching generated code:
 
 ```powershell
@@ -740,20 +740,26 @@ the short version:
 | 4 | `fix_timestamp_to_string_format` | Restores a `TimestampToString` format BladeBridge drops entirely |
 | 5 | `fix_date_format_pattern_case` | Fixes the letter-casing on a `DateToString`-derived `date_format()` pattern |
 | 6 | `fix_string_to_date_cast` | Restores a `StringToDate` format, same class of defect as #4 |
-| 7 | `fix_bare_numeric_cast` | Gives a `StringToDecimal`-derived `CAST(x AS numeric)` its real precision/scale instead of Spark's zero-decimal-place default |
-| 8 | `fix_nonnullable_string_coalesce` | DataStage's empty-string-vs-NULL semantics (the same defect §4 #2 documents for the other two implementations) |
-| 9 | `fix_csv_writes_to_delta` | Rewrites every raw `.csv()` write into a `saveAsTable` Delta write |
-| 10 | `fix_aggregator_functions` | Replaces BladeBridge's always-`MIN()` Aggregator output with the function the DataStage stage actually specifies |
-| 11 | `fix_numeric_casts` | Casts every numeric source column to its declared type, which BladeBridge only does when the original expression already had a function call |
+| 7 | `fix_date_from_days_since` | Gives `date_add(expr, 1)` the real (and possibly negative) day offset a `DateFromDaysSince(N, date)` derivation actually specified, instead of BladeBridge's hardcoded `+1` |
+| 8 | `fix_bare_numeric_cast` | Gives a `StringToDecimal`-derived `CAST(x AS numeric)` its real precision/scale instead of Spark's zero-decimal-place default |
+| 9 | `fix_nonnullable_string_coalesce` | DataStage's empty-string-vs-NULL semantics (the same defect §4 #2 documents for the other two implementations) -- except on the non-preserving side of an outer join, where a blanket `coalesce(x, '')` would mask a legitimate `NULL` the pipeline's own later `COALESCE(..., '<real default>')` needs to see |
+| 10 | `fix_csv_writes_to_delta` | Rewrites every raw `.csv()` write into a `saveAsTable` Delta write |
+| 11 | `fix_aggregator_functions` | Replaces BladeBridge's always-`MIN()` Aggregator output with the function the DataStage stage actually specifies |
+| 12 | `fix_numeric_casts` | Casts every numeric source column to its declared type, which BladeBridge only does when the original expression already had a function call |
+| 13 | `fix_funnel_union_all` | Unions in every input link a `Funnel` stage has, not just the first -- BladeBridge silently drops the rest |
 
-Three of the twelve underlying defects (not eleven -- fix #2 covers four on one line) were
-only found by actually deploying the fixed notebooks and running them, not by reading the
-generated code: the quote-escape option, the intermediate-read-as-CSV defect (which fails
-with an opaque Databricks platform error, not a Python exception), and the second shape of
-the `TimestampToString` defect (found by reconciling the result against an independent
-implementation and tracing a wrong value back to its source). `migration/README.md` §8c
-has the full table, the deployment result (23/23 tasks succeed), and the reconciliation
-result against the SDP implementation.
+Five of the fourteen underlying defects (not thirteen -- fix #2 covers four on one line)
+were only found by actually deploying the fixed notebooks and running them, not by reading
+the generated code: the quote-escape option, the intermediate-read-as-CSV defect (which
+fails with an opaque Databricks platform error, not a Python exception), the second shape
+of the `TimestampToString` defect, the `DateFromDaysSince` day-offset sign, and the
+`Funnel` stage silently dropping every input link but its first (all four found by
+reconciling the result against an independent implementation and tracing a wrong or
+missing value back to its source). `migration/README.md` §8c has the full table, the
+deployment result (24/24 tasks succeed, including the `promote_dim_customer` task this
+validation's job graph needs and initially omitted), and the reconciliation result against
+the SDP implementation (41 of 42 common tables match; the one holdout is a pre-existing,
+already-documented non-determinism, not a `dbxconv` defect).
 
 Scoped to the SPARKSQL target specifically -- it has not been run against `PYSPARK` or
 `DBSQL` output, which have at least some different defects of their own.

@@ -410,7 +410,22 @@ lnk_all_checks = spark.sql(f"""
 SELECT
 coalesce(lnk_cnt1.check_name, '') as check_name,
 CAST(lnk_cnt1.hits AS int) as hits
-FROM lnk_cnt1""")
+FROM lnk_cnt1
+UNION ALL
+SELECT
+coalesce(lnk_cnt2.check_name, '') as check_name,
+CAST(lnk_cnt2.hits AS int) as hits
+FROM lnk_cnt2
+UNION ALL
+SELECT
+coalesce(lnk_cnt3.check_name, '') as check_name,
+CAST(lnk_cnt3.hits AS int) as hits
+FROM lnk_cnt3
+UNION ALL
+SELECT
+coalesce(lnk_cnt4.check_name, '') as check_name,
+CAST(lnk_cnt4.hits AS int) as hits
+FROM lnk_cnt4""")
 lnk_all_checks.createOrReplaceTempView("lnk_all_checks")
 
 

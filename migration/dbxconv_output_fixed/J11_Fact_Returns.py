@@ -137,11 +137,11 @@ CAST(lnk_ret.invoice_date_key AS int) as invoice_date_key,
 coalesce(lnk_ret.year_month, '') as year_month,
 CAST(lnk_ret.returned_qty AS int) as returned_qty,
 CAST(lnk_ret.returned_amount AS decimal(18,2)) as returned_amount,
-coalesce(lnk_dim_product.category, '') as category,
+lnk_dim_product.category as category,
 CAST(lnk_dim_product.product_sk AS int) as product_sk
 FROM
 lnk_ret
-LEFT JOIN lnk_dim_product ON coalesce(lnk_ret.stock_code, '') = coalesce(lnk_dim_product.stock_code, '')""")
+LEFT JOIN lnk_dim_product ON coalesce(lnk_ret.stock_code, '') = lnk_dim_product.stock_code""")
 lnk_p.createOrReplaceTempView("lnk_p")
 
 

@@ -145,8 +145,8 @@ CAST(lnk_keyed.is_nonproduct AS int) as is_nonproduct,
 CAST(lnk_keyed.is_guest AS int) as is_guest,
 coalesce(lnk_keyed.year_month, '') as year_month,
 CAST(lnk_dim_customer.customer_sk AS int) as customer_sk,
-coalesce(lnk_dim_customer.customer_type, '') as customer_type,
-coalesce(lnk_dim_customer.loyalty_tier, '') as loyalty_tier,
+lnk_dim_customer.customer_type as customer_type,
+lnk_dim_customer.loyalty_tier as loyalty_tier,
 CAST(lnk_dim_customer.eff_start_key AS int) as eff_start_key,
 CAST(lnk_dim_customer.eff_end_key AS int) as eff_end_key
 FROM
@@ -237,13 +237,13 @@ coalesce(lnk_c_nn.year_month, '') as year_month,
 CAST(lnk_c_nn.customer_sk AS int) as customer_sk,
 coalesce(lnk_c_nn.customer_type, '') as customer_type,
 coalesce(lnk_c_nn.loyalty_tier, '') as loyalty_tier,
-coalesce(lnk_dim_product.category, '') as category,
-coalesce(lnk_dim_product.supplier_id, '') as supplier_id,
+lnk_dim_product.category as category,
+lnk_dim_product.supplier_id as supplier_id,
 CAST(lnk_dim_product.unit_cost AS decimal(18,2)) as unit_cost,
 CAST(lnk_dim_product.product_sk AS int) as product_sk
 FROM
 lnk_c_nn
-LEFT JOIN lnk_dim_product ON coalesce(lnk_c_nn.stock_code, '') = coalesce(lnk_dim_product.stock_code, '')""")
+LEFT JOIN lnk_dim_product ON coalesce(lnk_c_nn.stock_code, '') = lnk_dim_product.stock_code""")
 lnk_p.createOrReplaceTempView("lnk_p")
 
 
@@ -380,11 +380,11 @@ CAST(lnk_e.product_sk AS int) as product_sk,
 coalesce(lnk_e.region, '') as region,
 CAST(lnk_e.store_sk AS int) as store_sk,
 CAST(lnk_e.employee_sk AS int) as employee_sk,
-coalesce(lnk_dim_fx.currency, '') as currency,
+lnk_dim_fx.currency as currency,
 CAST(lnk_dim_fx.fx_rate AS decimal(18,6)) as fx_rate
 FROM
 lnk_e
-LEFT JOIN lnk_dim_fx ON coalesce(lnk_e.country, '') = coalesce(lnk_dim_fx.country, '') AND coalesce(lnk_e.year_month, '') = coalesce(lnk_dim_fx.year_month, '')""")
+LEFT JOIN lnk_dim_fx ON coalesce(lnk_e.country, '') = lnk_dim_fx.country AND coalesce(lnk_e.year_month, '') = lnk_dim_fx.year_month""")
 lnk_f.createOrReplaceTempView("lnk_f")
 
 

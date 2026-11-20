@@ -796,7 +796,7 @@ step with a per-token cost).
 
 ---
 
-## 8c. Deploying dbxconv for real: the 12 defects it took to make it run
+## 8c. Deploying dbxconv for real: the 14 defects it took to make it run
 
 §8a.5 called re-running `dbxconv` on the fixed XML and comparing it with the compiled
 version "not done yet". It's now done -- deployed to a live workspace, run end to end, and
@@ -807,13 +807,13 @@ the same reference the compiled version was built from.
 
 **`dbxconv`'s raw output does not run.** Converting all 23 jobs succeeds (`rc=0`, same as
 §8a.5), but running the generated SPARKSQL notebooks found that 11 of 23 don't even parse
-as Python, and the other 12 would silently write wrong data if deployed as-is. None of
+as Python, and the rest would silently write wrong data if deployed as-is. None of
 this is specific to this pipeline's columns or logic -- every defect traces to a gap in
 how BladeBridge's SPARKSQL config handles a particular DataStage construct, the same gap
 for any source using it. [`fix_dbxconv_output.py`](lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_output.py)
 (`lakebridge-workflow fix-dbxconv`) fixes all of them by reading the same condensed job
 model the rest of this package already parses -- not by patching this pipeline's output
-by hand. Twelve defects, nine found by reading the generated code, three found only by
+by hand. Fourteen defects, nine found by reading the generated code, five found only by
 deploying and running it and tracing a wrong or missing value back to its source:
 
 | # | Defect | Found by |
@@ -822,41 +822,67 @@ deploying and running it and tracing a wrong or missing value back to its source
 | 2 | Every source read is left as literal `load(f'''%PATH%''')` -- the parameter substitution that works on the write side never fires on the read side | Reading the code |
 | 3 | Every source read is hardcoded `option('header', 'false')` even though the source genuinely has a header row -- backwards from what "DataStage maps columns by position" (§4 #1) means | Reading the code |
 | 4 | No `escape` option is ever set, so an RFC 4180-escaped quote (`""` for a literal `"`) comes out with the escaping characters still in it, because Spark's CSV reader defaults to backslash escaping | **Deploying + reconciling**: `stg_products`/`stg_orders`/`dim_product` rows differed only where a product name contained a `"` |
-| 5 | A stage reading what an *earlier job in the same pipeline* wrote is left reading a CSV file that was never written, since fix #9 turns that write into a Delta table -- fails with an opaque, non-retriable platform error, not a Python exception | **Deploying + isolating**: reproduced identically alone or concurrently, which took isolating one job to rule out a concurrency explanation before finding the real cause |
+| 5 | A stage reading what an *earlier job in the same pipeline* wrote is left reading a CSV file that was never written, since `fix_csv_writes_to_delta` turns that write into a Delta table -- fails with an opaque, non-retriable platform error, not a Python exception | **Deploying + isolating**: reproduced identically alone or concurrently, which took isolating one job to rule out a concurrency explanation before finding the real cause |
 | 6 | `PxHead` (Top-N) has no handler at all -- a literal `// No handler defined...` comment (not valid Python) dropped into the file, the stage's output never defined | Reading the code |
 | 7 | `TimestampToString(ts, fmt)` loses its format entirely, becoming `CAST(x AS STRING)` -- Spark's default representation, not DataStage's | Reading the code |
 | 8 | The same function also has a second generated shape (`CAST(bare_column AS STRING)`, when the input is already timestamp-typed) that defect #7's first fix didn't cover | **Deploying + reconciling**: `fact_sales.year_month` was a raw timestamp string instead of `"201012"`, which meant its FX-rate join key never matched anything, silently defaulting `currency`/`unit_price`/`local_amount` |
 | 9 | `DateToString(date, fmt)` correctly becomes `date_format(...)`, but the pattern string is emitted all upper-case (`'YYYYMMDD'`) -- Spark 3.0+ rejects mixing capital `Y` (week-based-year) with a bare month | Reading the code; confirmed by running it (`INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION`) |
 | 10 | `StringToDate(value, fmt)` loses its format the same way `TimestampToString` does, becoming a bare `CAST(value AS date)` -- works by coincidence for an ISO-formatted widget parameter, fails outright on a `yyyyMMdd` date key | Reading the code |
-| 11 | `StringToDecimal(x)` (no precision in DataStage's own syntax) becomes a bare `CAST(x AS numeric)` -- Spark's default is `DECIMAL(10, 0)`, silently rounding away every decimal place of a real money value | **Deploying + reconciling**: `fact_sales.unit_price` was `4.00` instead of `4.25` |
-| 12 | Aggregator output is always `MIN(...)` regardless of the DataStage stage's actual `selection`/`reduce` property -- a `count` selection references a column name that was never there (`MIN(rows_loaded)`, an unresolved-column error at runtime), and `sum`/other reduce functions compute the wrong aggregate with no error at all | Reading the code; the `count` case also surfaced as a runtime error |
+| 11 | `DateFromDaysSince(N, date)` -- date plus N (possibly negative) days -- always becomes `date_add(expr, 1)`, ignoring the derivation's real `N` entirely | **Deploying + reconciling**: an SCD2 job's `DateFromDaysSince(-1, pEffDate)` (expire the old row the day *before* the new version starts) came out adding a day instead of subtracting one -- a one-day overlap where both the old and new customer version claimed to be in effect, which `exceptAll` flagged on both sides even though every other column matched |
+| 12 | `StringToDecimal(x)` (no precision in DataStage's own syntax) becomes a bare `CAST(x AS numeric)` -- Spark's default is `DECIMAL(10, 0)`, silently rounding away every decimal place of a real money value | **Deploying + reconciling**: `fact_sales.unit_price` was `4.00` instead of `4.25` |
+| 13 | Aggregator output is always `MIN(...)` regardless of the DataStage stage's actual `selection`/`reduce` property -- a `count` selection references a column name that was never there (`MIN(rows_loaded)`, an unresolved-column error at runtime), and `sum`/other reduce functions compute the wrong aggregate with no error at all | Reading the code; the `count` case also surfaced as a runtime error |
+| 14 | `Funnel` (DataStage's N-input `UNION ALL`, one shared schema) only ever reads its first input link -- `SELECT ... FROM <first link>`, silently dropping the rest, no error of any kind | **Deploying + reconciling**: a customer SCD2 job's 4-input Funnel recombining history/carried-forward/expired/new-version rows came out as just the history branch, so `dim_customer_next` never grew past its initial load; a DQ-checks job's 4-input Funnel recombining four independent check counts came out as just the first check |
+
+Resolving the last few reconciliation differences also surfaced a bug in *this tool's own*
+fix #9 (empty-string-vs-NULL coalescing, not a new `dbxconv` defect -- BladeBridge's raw
+output for the affected lines was already correct): wrapping every reference to a
+non-nullable-declared column in `coalesce(x, '')` is wrong for a column coming from the
+non-preserving side of an outer join, because such a reference can legitimately be `NULL`
+there regardless of the column's own declared nullability, and this repository's own
+pipelines immediately follow such a join with their own `COALESCE(..., '<real default>')`
+for exactly that reason. The blanket wrap converted the `NULL` to `''` one stage too early,
+so the pipeline's intended `'unknown'`/`'NONE'`/`'Unknown'` guest-customer and
+orphan-product defaults never fired -- found the same way as everything else here, by
+reconciling: every guest-customer row in `fact_sales` carried `''` instead of `'unknown'`.
+Fixed by excluding a join's non-preserving in-link(s) from the wrap entirely
+(`outer_join_nullable_links`, derived from the join's `operator` property and its in-links'
+DSX declaration order), not by adding a 15th "defect" to the table above.
 
 Deployed as a one-time Databricks Jobs run (`databricks jobs submit`, not a saved job) with
 the dependency graph lifted from `bundle/resources/retail_dw_job.yml`, simplified for a
-fresh/empty target schema (no `check_dim_customer`/`cond_dim_missing`/`promote_dim_customer`
-tasks -- J05 unconditionally runs and J06 unconditionally follows it, the same end state
-those tasks exist to guarantee on a *repeat* run, which this validation isn't). **Result:
-23/23 tasks succeed**, including J06's SCD2 job -- the first time this repository's
+fresh/empty target schema (no `check_dim_customer`/`cond_dim_missing` tasks -- J05
+unconditionally runs and J06 unconditionally follows it, the same end state those two
+tasks exist to guarantee on a *repeat* run, which this validation isn't). `promote_dim_customer`
+*is* included, unconditionally after J06, reusing the same hand-written notebook the
+compiled/Switch bundles already have (`bundle/src/notebooks/_promote_dim_customer.py`) --
+missing it on the first attempt at this deployment left `dim_customer` frozen at J05's
+initial load, which every fact/mart table downstream of J10/J11 then joined against,
+cascading into most of the table-level mismatches below until it was added. **Result:
+24/24 tasks succeed**, including J06's SCD2 job -- the first time this repository's
 `dbxconv` output has run at all, not just converted.
 
 **Reconciled against `retail_dw_sdp`** (schema + `exceptAll` row comparison, no DataStage
 run needed on either side): the table lists match except for two SDP-only artifacts
 (`dim_customer_history`, by design per §7.1, and `dq_validation_results`, from running DQX
-validate on SDP that this pass doesn't). Of 42 common tables, **25 match exactly, 17 still
-differ** -- shrinking with each defect fixed above (12 → 20 → 25 as #4, #8, and #11 landed),
-and on inspection the remaining differences are a mix of a few more rows per table (not a
-wholesale mismatch -- `fact_sales`' own previously-wrong sample row now matches exactly)
-and, for at least `basket_affinity`, the same tie-break non-determinism §7.3 already
-documents as present in every implementation, not a `dbxconv` defect. The remaining 17
-tables were not individually root-caused; see Open Items.
+validate on SDP that this pass doesn't). Of 42 common tables, **41 match exactly, 1 still
+differs** -- shrinking from 25 to 41 as the fixes above landed (25 → 36 once the Funnel fix
+and the missing `promote_dim_customer` task were both in place, → 38 once
+`DateFromDaysSince` was fixed, → 41 once the outer-join-coalesce scoping was corrected).
+The one holdout, `basket_affinity`, is the same tie-break non-determinism §7.3 already
+documents as present in every implementation (a single-column `ORDER BY pair_count DESC`
+with no tie-break before `LIMIT 1000`), not a `dbxconv` defect -- fixing it would mean
+changing the source pipeline's own sort logic, the same source-level decision §7.3 and
+Open Items already defer, not something to do unilaterally while reconciling an unrelated
+converter.
 
 What this does and doesn't prove: it's the same kind of result §6's reconciliation is,
 just one step earlier in the pipeline -- two independently-produced implementations
-(dbxconv's literal conversion vs. Switch's LLM-driven SDP rewrite) agreeing on the
-majority of outputs is evidence both captured DataStage's real semantics, not proof of it
+(dbxconv's literal conversion vs. Switch's LLM-driven SDP rewrite) agreeing on 41 of 42
+tables, with the one disagreement already explained by non-determinism rather than a
+defect, is strong evidence both captured DataStage's real semantics -- not proof of it
 (the same caveat §6 states applies here too, and more strongly: dbxconv and SDP share no
-common ancestor the way compiled and Switch do, so agreement here is a stronger signal,
-but 17 tables still disagreeing means that evidence is incomplete, not negative).
+common ancestor the way compiled and Switch do, so agreement here is a stronger signal
+than §6's).
 
 The fixed notebooks, the job spec, the reconciliation notebook, and its result are checked
 in under [`dbxconv_output_fixed/`](dbxconv_output_fixed/) as evidence, the same way
@@ -866,11 +892,11 @@ in under [`dbxconv_output_fixed/`](dbxconv_output_fixed/) as evidence, the same 
 
 ## 8. Open items and known limitations
 
-- **BladeBridge** now converts offline (§8a), and its output now deploys and runs after the 12 defects §8c fixes
-  (fixed, not patched by hand -- the fixer reads the same condensed job model this package already parses).
-  Still open: contribute the `LINK|TABLE=TABLE_NAME` mapping for `ORAOCI9` upstream (Lakebridge issue / PR), and
-  the 17 remaining table-level reconciliation differences (§8c, Open Items). `lakebridge transpile` itself still
-  fails with `Client has not yet registered its transpile capability`.
+- **BladeBridge** now converts offline (§8a), and its output now deploys, runs, and reconciles 41/42 tables
+  against SDP after the 14 defects §8c fixes (fixed, not patched by hand -- the fixer reads the same condensed
+  job model this package already parses). Still open: contribute the `LINK|TABLE=TABLE_NAME` mapping for
+  `ORAOCI9` upstream (Lakebridge issue / PR). `lakebridge transpile` itself still fails with `Client has not yet
+  registered its transpile capability`.
 - **No comparison against DataStage output.** `Output_Data/` holds outputs of the *original* 4 jobs, not the
   23-job pipeline. Running the DataStage jobs on the same inputs and reconciling (Lakebridge Reconcile or
   DQX `compare_datasets`) is the remaining proof of equivalence.
@@ -883,8 +909,9 @@ in under [`dbxconv_output_fixed/`](dbxconv_output_fixed/) as evidence, the same 
   It means dropping `dim_customer`, `dim_customer_next` and `audit_scd2_customer` in `retail_dw_compiled` before the
   master job runs. Not done yet: it needs approval, because it deletes tables.
 - **Non-deterministic top-N in J19** (`basket_affinity`): sorted only by `pair_count`, so ties at the cutoff are
-  arbitrary in every implementation (§7.3). Adding a tie-break (e.g. `stock_code`, `stock_code_b`) is a change to
-  the source logic and should be agreed first.
+  arbitrary in every implementation (§7.3) -- confirmed, not just inferred, by §8c's reconciliation: it's the
+  *only* one of 42 tables `dbxconv` and SDP still disagree on after every other defect was fixed. Adding a
+  tie-break (e.g. `stock_code`, `stock_code_b`) is a change to the source logic and should be agreed first.
 - **SDP files with invented defaults.** 20 of the 21 SDP files still contain the `src_dir` defaults added by
   Switch's fix-up step (§7.4). Regenerate them with `max_fix_attempts: 0`.
 - **Input-order surrogate keys** (`store_sk`, `employee_sk`, `promo_sk`) depend on file read order. Consider
@@ -907,13 +934,6 @@ in under [`dbxconv_output_fixed/`](dbxconv_output_fixed/) as evidence, the same 
   source with the hundreds or thousands of jobs (or embedded queries) it's actually meant for, so the real
   percentage selected -- and whether 526k/23 tokens-per-job is even a reasonable starting estimate for a very
   different source -- is unverified at that scale.
-- **17 of 42 tables still disagree between `dbxconv` (fixed) and SDP** (§8c), not yet individually root-caused.
-  Spot-checking `fact_sales` found the specific row that previously differed now matches exactly, so the 17 are
-  believed to be a shrinking set of edge-case rows rather than wholesale mismatches, and `basket_affinity` is
-  likely the pre-existing tie-break non-determinism §7.3 already documents -- but this is inference from the
-  pattern of what's already been fixed, not confirmation. Each of the 17 needs the same read-code-then-run-it
-  loop §8c's 12 defects came from to know whether it's defect #13, several smaller ones, or genuinely accounted
-  for by non-determinism.
 - **`fix_dbxconv_output.py` targets the SPARKSQL `dbxconv` output specifically.** It was not run against `PYSPARK`
   or `DBSQL` target output (§8a.2), which have at least some different defects of their own (§3's earlier
   PYSPARK spot-check found a bare, unquoted `sep` identifier and a write path missing its `f`-string prefix,

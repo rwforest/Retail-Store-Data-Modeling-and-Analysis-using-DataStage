@@ -5,25 +5,9 @@
     "dq_validation_results"
   ],
   "commonTables": 42,
-  "matchingTables": 25,
+  "matchingTables": 41,
   "mismatchedTables": [
-    "basket_affinity",
-    "customer_360",
-    "customer_segments",
-    "dim_customer",
-    "dim_customer_next",
-    "dq_fact_checks",
-    "dq_orphan_products",
-    "fact_invoice",
-    "fact_returns",
-    "fact_sales",
-    "q1_employee_transactions",
-    "q1_top10_employees",
-    "q2_customertype_profit",
-    "q2_winning_customertype",
-    "q3_bonus_program",
-    "q3_bonus_summary",
-    "retail_data_mart"
+    "basket_affinity"
   ],
   "details": [
     {
@@ -108,11 +92,11 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 79,
+      "countA": 820,
       "countB": 820,
-      "rowsOnlyInA": 8,
-      "rowsOnlyInB": 749,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "customer_segments",
@@ -121,31 +105,31 @@
       "colsOnlyInB": [],
       "countA": 5,
       "countB": 5,
-      "rowsOnlyInA": 5,
-      "rowsOnlyInB": 5,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "dim_customer",
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 94,
+      "countA": 948,
       "countB": 948,
-      "rowsOnlyInA": 13,
-      "rowsOnlyInB": 867,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "dim_customer_next",
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 0,
+      "countA": 948,
       "countB": 948,
       "rowsOnlyInA": 0,
-      "rowsOnlyInB": 948,
-      "match": false
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "dim_date",
@@ -218,11 +202,11 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 1,
+      "countA": 4,
       "countB": 4,
-      "rowsOnlyInA": 1,
-      "rowsOnlyInB": 4,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "dq_order_anomalies",
@@ -242,9 +226,9 @@
       "colsOnlyInB": [],
       "countA": 12,
       "countB": 12,
-      "rowsOnlyInA": 12,
-      "rowsOnlyInB": 12,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "fact_invoice",
@@ -253,9 +237,9 @@
       "colsOnlyInB": [],
       "countA": 1202,
       "countB": 1202,
-      "rowsOnlyInA": 920,
-      "rowsOnlyInB": 920,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "fact_returns",
@@ -264,9 +248,9 @@
       "colsOnlyInB": [],
       "countA": 533,
       "countB": 533,
-      "rowsOnlyInA": 420,
-      "rowsOnlyInB": 420,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "fact_sales",
@@ -275,9 +259,9 @@
       "colsOnlyInB": [],
       "countA": 32575,
       "countB": 32575,
-      "rowsOnlyInA": 29186,
-      "rowsOnlyInB": 29186,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "product_performance",
@@ -317,11 +301,11 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 76,
+      "countA": 117,
       "countB": 117,
-      "rowsOnlyInA": 75,
-      "rowsOnlyInB": 116,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "q1_top10_employees",
@@ -330,9 +314,9 @@
       "colsOnlyInB": [],
       "countA": 10,
       "countB": 10,
-      "rowsOnlyInA": 10,
-      "rowsOnlyInB": 10,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "q2_customertype_profit",
@@ -341,9 +325,9 @@
       "colsOnlyInB": [],
       "countA": 2,
       "countB": 2,
-      "rowsOnlyInA": 2,
-      "rowsOnlyInB": 2,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "q2_winning_customertype",
@@ -352,20 +336,20 @@
       "colsOnlyInB": [],
       "countA": 1,
       "countB": 1,
-      "rowsOnlyInA": 1,
-      "rowsOnlyInB": 1,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "q3_bonus_program",
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 79,
+      "countA": 100,
       "countB": 100,
-      "rowsOnlyInA": 63,
-      "rowsOnlyInB": 84,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "q3_bonus_summary",
@@ -374,9 +358,9 @@
       "colsOnlyInB": [],
       "countA": 1,
       "countB": 1,
-      "rowsOnlyInA": 1,
-      "rowsOnlyInB": 1,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "rej_orders",
@@ -394,11 +378,11 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 3442,
+      "countA": 23469,
       "countB": 23469,
-      "rowsOnlyInA": 53,
-      "rowsOnlyInB": 20080,
-      "match": false
+      "rowsOnlyInA": 0,
+      "rowsOnlyInB": 0,
+      "match": true
     },
     {
       "table": "stg_active_products",

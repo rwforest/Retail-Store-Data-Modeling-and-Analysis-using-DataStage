@@ -81,6 +81,22 @@
       ]
     },
     {
+      "task_key": "promote_dim_customer",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/_promote_dim_customer",
+        "base_parameters": {
+          "catalog": "unitygo",
+          "schema": "retail_dw_dbxconv"
+        }
+      },
+      "environment_key": "default",
+      "depends_on": [
+        {
+          "task_key": "J06_Dim_Customer_SCD2"
+        }
+      ]
+    },
+    {
       "task_key": "J07_Dim_Product",
       "notebook_task": {
         "notebook_path": "/Workspace/Users/<you>/retail_dw_dbxconv_fixed/J07_Dim_Product",
@@ -163,7 +179,7 @@
       "environment_key": "default",
       "depends_on": [
         {
-          "task_key": "J06_Dim_Customer_SCD2"
+          "task_key": "promote_dim_customer"
         },
         {
           "task_key": "J07_Dim_Product"
@@ -187,7 +203,7 @@
       "environment_key": "default",
       "depends_on": [
         {
-          "task_key": "J06_Dim_Customer_SCD2"
+          "task_key": "promote_dim_customer"
         },
         {
           "task_key": "J07_Dim_Product"

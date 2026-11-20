@@ -12,7 +12,7 @@ job's particular columns or logic -- so every fix here reads the same condensed 
 specification (``common.CondensedJob``) that the rest of this package already parses, and
 works the same way for any DataStage source converted with the same target.
 
-Eleven fixes, applied in order, each independently callable and independently reported:
+Thirteen fixes, applied in order, each independently callable and independently reported:
 
 1. **Blank attribute references** (``fix_blank_attribute_refs``): a target stage reading
    from an Aggregator emits one extra ``lnk_x..alias('lnk_x')`` line per aggregated column
@@ -71,7 +71,15 @@ Eleven fixes, applied in order, each independently callable and independently re
    coincidentally fine -- but fails outright on a ``yyyyMMdd``-format date key. Only
    rewrites a call whose value is a genuine qualified column reference, never a bare
    widget name, using ``to_date(cast(value AS string), '<format>')``.
-7. **``StringToDecimal()`` casts with no precision** (``fix_bare_numeric_cast``):
+7. **``DateFromDaysSince(N, date)`` always adds exactly one day**
+   (``fix_date_from_days_since``): BladeBridge's ``date_add(<expr>, 1)`` hardcodes +1
+   regardless of the derivation's real (and possibly negative) ``N`` -- an SCD2 job's
+   ``DateFromDaysSince(-1, pEffDate)`` (expire the old row the day *before* the new
+   version starts) came out adding a day instead of subtracting one, a one-day overlap
+   between old and new versions that only reconciliation caught, since a bare
+   ``date_add(..., 1)`` looks exactly as complete as a correct one. Restored from ``N`` in
+   the derivation text itself.
+8. **``StringToDecimal()`` casts with no precision** (``fix_bare_numeric_cast``):
    ``StringToDecimal(x)`` carries no precision/scale in DataStage's own syntax -- the real
    precision only exists on the declared target column -- so BladeBridge emits a bare
    ``CAST(x AS numeric)``. Spark's ``numeric`` with nothing specified defaults to
@@ -80,19 +88,30 @@ Eleven fixes, applied in order, each independently callable and independently re
    occurrence, using the declared type of the column the line's expression is assigned
    to, since an expression like ``CAST(a AS numeric) * CAST(b AS numeric) as line_amount``
    has two bare casts that both belong to the one target column.
-8. **DataStage's empty-string-vs-NULL semantics** (``fix_nonnullable_string_coalesce``):
+9. **DataStage's empty-string-vs-NULL semantics** (``fix_nonnullable_string_coalesce``):
    reproduces the exact defect this repository's own migration found and fixed during
    validation (``migration/README.md`` §4 #2) -- a non-nullable source string column reads
    as `""` in DataStage but `NULL` in Spark, which silently breaks any `Len(Trim(x)) = 0`
-   check. Every qualified reference to such a column is wrapped in ``coalesce(..., '')``.
-9. **CSV files instead of Delta tables** (``fix_csv_writes_to_delta``): every target write
+   check. Every qualified reference to such a column is wrapped in ``coalesce(..., '')`` --
+   except a reference to the non-preserving side of an outer join (``outer_join_nullable_links``):
+   a left join's right-hand columns are declared non-nullable as *plain table columns*, but
+   can still be genuinely ``NULL`` in the join's own output whenever a row doesn't match, and
+   this repository's own pipelines immediately follow such a join with their own
+   ``COALESCE(..., '<real default>')`` step for exactly that reason. Coalescing to `''` one
+   stage earlier converts that `NULL` before the real default ever sees it, silently
+   replacing the job's own intended guest-customer/orphan-product default (`'unknown'`,
+   `'NONE'`, `'Unknown'`) with an empty string instead -- found by reconciling: every
+   guest-customer (`customer_id = 0`) row in `fact_sales` carried `''` instead of `'unknown'`/
+   `'NONE'`, accounting for the large majority of that table's remaining row mismatches
+   (guest checkouts are common in retail data, not an edge case).
+10. **CSV files instead of Delta tables** (``fix_csv_writes_to_delta``): every target write
    is a raw ``.csv()`` file write to a widget-driven directory, matching DataStage's own
    file-based intermediate storage rather than this migration's chosen Delta-table mapping
    (§2.1). Rewritten to ``saveAsTable(f'{catalog}.{schema}.<file stem>')``, with ``catalog``/
    ``schema`` widgets added if not already present, and `overwriteSchema=true` so
    re-running the same job against a target from an earlier attempt doesn't fail if a
    column's inferred type has since changed.
-10. **Aggregator functions all become MIN()** (``fix_aggregator_functions``): BladeBridge's
+11. **Aggregator functions all become MIN()** (``fix_aggregator_functions``): BladeBridge's
    Aggregator handling ignores the DataStage stage's actual `selection`/`reduce` property
    and always emits `MIN(...)`. For a `count` selection this references a column that was
    never there in the first place (`MIN(rows_loaded)` where `rows_loaded` is the *name of
@@ -101,7 +120,7 @@ Eleven fixes, applied in order, each independently callable and independently re
    computes the wrong aggregate with no error at all. Replaced with the correct
    `COUNT(*)`/`SUM(...)`/etc. by parsing the same `selection`/`countField`/`reduce`
    properties `ds2spark.py`'s own `st_agg` does (same DSX encoding, same regex).
-11. **Numeric columns never cast** (``fix_numeric_casts``): BladeBridge only casts a column
+12. **Numeric columns never cast** (``fix_numeric_casts``): BladeBridge only casts a column
    when the DataStage expression already contained a function call; a bare passthrough or
    a bare comparison against a literal (`ListPrice < 1`) leaves the column as the literal
    CSV string Spark's schema-less read produced. That's invisible until the column holds a
@@ -111,6 +130,19 @@ Eleven fixes, applied in order, each independently callable and independently re
    numeric source column is now cast to its declared SQL type right where it's read, the
    same way `ds2spark.py`'s own `read_col` always casts regardless of whether the specific
    derivation needed it syntactically.
+13. **`Funnel` stages only union their first input link** (``fix_funnel_union_all``):
+   DataStage's Funnel (`PxFunnel`) stage concatenates N input links sharing one schema
+   into a single output stream -- a plain `UNION ALL`. BladeBridge's SPARKSQL conversion
+   emits a `SELECT ... FROM <first input link>` and silently drops every other input
+   link, with no error of any kind -- found only by deploying and reconciling: a customer
+   SCD2 job's Funnel (recombining unchanged history, newly-expired rows, new versions, and
+   carried-forward current rows -- 4 inputs) came out as just the history branch, so the
+   dimension never grew past its initial load (`dim_customer_next` stayed empty); a
+   DQ-checks job's Funnel (recombining four independent check counts -- 4 inputs) came out
+   as just the first check, silently dropping the other three. Rewritten into a `UNION
+   ALL` of one `SELECT` per input link, reusing the exact `SELECT` list BladeBridge already
+   generated for the first input link (only the source table reference differs, since a
+   Funnel's own semantics require every input to already share the output schema).
 
 Example::
 
@@ -136,6 +168,8 @@ SORT_KIND_RE = re.compile(r"sort", re.IGNORECASE)
 ORDER_BREAKING_KIND_RE = re.compile(r"join|aggregat|funnel", re.IGNORECASE)
 HEAD_KIND_RE = re.compile(r"head", re.IGNORECASE)
 AGGREGATOR_KIND_RE = re.compile(r"aggregat", re.IGNORECASE)
+FUNNEL_KIND_RE = re.compile(r"funnel", re.IGNORECASE)
+JOIN_KIND_RE = re.compile(r"join", re.IGNORECASE)
 
 # The exact pattern ds2spark.py's st_sort uses to pull key name + direction out of a Sort
 # stage's DSX-encoded "key" property (DataStage's \(1)/\(2)/\(3) field/value/subvalue marks;
@@ -191,6 +225,14 @@ DATE_FORMAT_CALL_RE = re.compile(rf"date_format\(({BALANCED_EXPR_RE_SRC}),\s*'([
 # yyyyMMdd-format date key, which a bare cast can't parse at all.
 STRING_TO_DATE_DERIVATION_RE = re.compile(rf'StringToDate\(({BALANCED_EXPR_RE_SRC}),\s*"([^"]+)"\)')
 
+# DateFromDaysSince(N, date) -- DataStage's date-plus-N-days function, N a (possibly negative)
+# integer literal. BladeBridge's generated date_add(expr, 1) hardcodes +1 regardless of the
+# derivation's real N, found only by reconciling: an SCD2 expiry date one day *after* the
+# new version's start date instead of one day *before* it (N=-1 in the only derivation using
+# this function in this repository), a one-day overlap between a dimension's expired and
+# current rows that exceptAll flags as a mismatch on both sides.
+DATE_FROM_DAYS_SINCE_DERIVATION_RE = re.compile(r"DateFromDaysSince\(\s*(-?\d+)\s*,")
+
 # --- Generated-code patterns (SPARKSQL target only; see module docstring) ----------------
 BLANK_ATTR_RE = re.compile(r"^[ \t]*(\w+)\.\.alias\('\1'\)[^\n]*\n", re.MULTILINE)
 SOURCE_READ_RE = re.compile(
@@ -217,6 +259,10 @@ CSV_WRITE_RE = re.compile(
     r"\.option\('sep',''\)\.csv\(f'''\{(\w+)\}/([A-Za-z0-9_]+)\.csv'''\)"
 )
 LAST_WIDGET_GET_RE = re.compile(r"^(\w+) = dbutils\.widgets\.get\(\"\1\"\)[ \t]*\n", re.MULTILINE)
+# BladeBridge's own translation of DateFromDaysSince(N, date) -- always `date_add(<expr>, 1)`,
+# whatever N actually was. <expr> itself can contain nested parens (`cast('{x}' as date)`),
+# hence the balanced-paren group rather than a bare `[^,]+`.
+DATE_ADD_CALL_RE = re.compile(rf"date_add\(({BALANCED_EXPR_RE_SRC}),\s*-?\d+\)")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -230,6 +276,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--schema", required=True, help="Unity Catalog schema for saveAsTable")
     p.add_argument("--out-dir", type=Path, required=True, help="where to write patched notebooks")
     return p.parse_args(argv)
+
+
+def outer_join_nullable_links(job: CondensedJob) -> set[str]:
+    """Link names that are the non-preserving side of some outer join in this job.
+
+    A DataStage ``PxJoin``'s ``operator`` property, plus its in-links' own DSX declaration
+    order (first in-link is the "left"/preserving side, second is "right"), determines which
+    in-link(s) can come out of the join as ``NULL`` even though the link's *own* column is
+    declared non-nullable as a plain table read: a ``leftouterjoin``'s second-and-later
+    in-links, a ``rightouterjoin``'s first in-link, or every in-link of a ``fullouterjoin``.
+    An ``innerjoin`` drops non-matching rows entirely rather than nulling a column, so it
+    never needs this treatment. Used by ``fix_nonnullable_string_coalesce`` so it never
+    coalesces away a join's own legitimate "no match" ``NULL`` before a pipeline's later
+    ``COALESCE(..., '<real default>')`` step gets to see it (see its docstring, point 9).
+    """
+    nullable_links: set[str] = set()
+    for stage in job.stages:
+        if not JOIN_KIND_RE.search(stage.kind):
+            continue
+        operator = stage.prop_map.get("operator", "").strip().lower()
+        in_links = [lk.link_name for lk in stage.links if lk.direction == "in"]
+        if operator == "leftouterjoin":
+            nullable_links.update(in_links[1:])
+        elif operator == "rightouterjoin":
+            nullable_links.update(in_links[:-1])
+        elif operator == "fullouterjoin":
+            nullable_links.update(in_links)
+    return nullable_links
 
 
 def link_order(job: CondensedJob) -> dict[str, str | None]:
@@ -496,6 +570,47 @@ def fix_string_to_date_cast(code: str, job: CondensedJob) -> tuple[str, int]:
     return code, count
 
 
+def fix_date_from_days_since(code: str, job: CondensedJob) -> tuple[str, int]:
+    """Give `date_add(expr, 1)` the real (and possibly negative) day offset it should have.
+
+    `DateFromDaysSince(N, date)` is DataStage's date-plus-N-days function, N a (possibly
+    negative) integer literal carried in the derivation text itself. BladeBridge's generated
+    `date_add(<expr>, 1)` hardcodes a +1 regardless of what N actually was, dropping it on
+    the floor entirely -- found only by reconciling, not by reading the generated code,
+    since a bare `date_add(..., 1)` looks exactly as complete as a correct one: an SCD2
+    job's `DateFromDaysSince(-1, pEffDate)` (meant to expire an old row the day *before* its
+    replacement's start date) came out adding a day instead of subtracting one, so the
+    expired row's end date landed one day *after* the new version's start date -- a one-day
+    overlap where both the old and new version claim to be in effect, which `exceptAll`
+    flags on both sides even though every other column matches. Scoped per generated line
+    by its trailing column name, the same convention `fix_bare_numeric_cast` uses, since
+    `date_add(...)`'s own target column is what the derivation is keyed on.
+    """
+    offsets: dict[str, int] = {}
+    for stage in job.stages:
+        for lk in stage.links:
+            for col in lk.columns:
+                m = DATE_FROM_DAYS_SINCE_DERIVATION_RE.search(col.get("derivation") or "")
+                if m:
+                    offsets[col["name"]] = int(m.group(1))
+    if not offsets:
+        return code, 0
+
+    count = 0
+    lines = code.split("\n")
+    for i, line in enumerate(lines):
+        if "date_add(" not in line:
+            continue
+        m = re.search(r"as\s+(\w+)\s*,?\s*$", line.strip())
+        if not m or m.group(1) not in offsets:
+            continue
+        new_line, n = DATE_ADD_CALL_RE.subn(rf"date_add(\1, {offsets[m.group(1)]})", line)
+        if n:
+            lines[i] = new_line
+            count += n
+    return "\n".join(lines), count
+
+
 def fix_nonnullable_string_coalesce(code: str, job: CondensedJob) -> tuple[str, int]:
     """Wrap every reference to a non-nullable source string column in coalesce(x, '').
 
@@ -514,11 +629,22 @@ def fix_nonnullable_string_coalesce(code: str, job: CondensedJob) -> tuple[str, 
     DataFrame-API reference in this family of generated code is immediately followed by
     `.alias(`, so that's used to tell the two contexts apart: `lit('')` in the one case,
     plain `''` in the other.
+
+    Skips any link that's the non-preserving side of an outer join elsewhere in this job
+    (``outer_join_nullable_links``) entirely: that link's column is non-nullable as a
+    *plain table read*, but the join's own output can still legitimately be `NULL` there
+    when a row doesn't match, and this repository's pipelines immediately follow such a
+    join with their own `COALESCE(..., '<real default>')` for exactly that case. Wrapping
+    it here instead would convert that `NULL` to `''` one stage too early, so the later,
+    real default-substitution step never fires -- found by reconciling: every
+    guest-customer row in `fact_sales` carried `''` instead of the job's own intended
+    `'unknown'`/`'NONE'` default.
     """
+    nullable_join_links = outer_join_nullable_links(job)
     count = 0
     for stage in job.stages:
         for lk in stage.links:
-            if lk.direction != "out":
+            if lk.direction != "out" or lk.link_name in nullable_join_links:
                 continue
             for col in lk.columns:
                 if col.get("nullable") or col.get("sqlType") not in STRING_SQL_TYPES:
@@ -671,6 +797,56 @@ def fix_numeric_casts(code: str, job: CondensedJob) -> tuple[str, int]:
     return code, count
 
 
+def fix_funnel_union_all(code: str, job: CondensedJob) -> tuple[str, int]:
+    """Union in every input link a Funnel stage has, not just its first.
+
+    DataStage's Funnel stage (``PxFunnel``) concatenates N input links that already share
+    one schema into a single output stream -- a plain ``UNION ALL``. BladeBridge's
+    SPARKSQL conversion emits a bare ``SELECT ... FROM <first input link>`` and silently
+    drops every other input link -- no error, no missing-handler comment, nothing that
+    looks incomplete on its own. Found only by deploying and reconciling: a customer SCD2
+    job's Funnel recombines unchanged history, newly-expired rows, new versions, and
+    carried-forward current rows (4 inputs) -- it came out as just the history branch, so
+    the dimension never grew past its initial load (``dim_customer_next`` stayed empty on
+    every run). A DQ-checks job's Funnel recombines four independent check counts (4
+    inputs) -- it came out as just the first check, silently dropping the other three.
+
+    Rewritten into a ``UNION ALL`` of one ``SELECT`` per input link, reusing the exact
+    ``SELECT`` list BladeBridge already generated for the first input link and swapping
+    only the source table reference -- a Funnel's own semantics require every input to
+    already share the output schema, so nothing else can legitimately differ between
+    branches. Run after every other per-column fix above (numeric casts, coalesce
+    wrapping, ...) so each new branch inherits whatever wrapping was already applied to
+    the first, instead of needing to re-derive it a second time.
+    """
+    count = 0
+    for stage in job.stages:
+        if not FUNNEL_KIND_RE.search(stage.kind):
+            continue
+        in_links = [lk.link_name for lk in stage.links if lk.direction == "in"]
+        out_links = [lk.link_name for lk in stage.links if lk.direction == "out"]
+        if len(in_links) < 2 or len(out_links) != 1:
+            continue
+        out_link = out_links[0]
+        first_in = in_links[0]
+        pattern = re.compile(
+            rf'{re.escape(out_link)} = spark\.sql\(f"""\n(SELECT\n.*?)\nFROM\s+{re.escape(first_in)}\s*"""\)',
+            re.DOTALL,
+        )
+        m = pattern.search(code)
+        if not m:
+            continue
+        select_block = m.group(1)
+        alias_re = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(first_in)}\.")
+        branches = [f"{select_block}\nFROM {first_in}"]
+        for other in in_links[1:]:
+            branches.append(f"{alias_re.sub(f'{other}.', select_block)}\nFROM {other}")
+        replacement = f'{out_link} = spark.sql(f"""\n' + "\nUNION ALL\n".join(branches) + '""")'
+        code = code[:m.start()] + replacement + code[m.end():]
+        count += 1
+    return code, count
+
+
 def fix_csv_writes_to_delta(code: str, catalog: str, schema: str) -> tuple[str, int, list[str]]:
     """Rewrite every raw `.csv()` target write into a `saveAsTable` Delta write.
 
@@ -735,6 +911,7 @@ def fix_job(job_name: str, notebook_path: Path, job: CondensedJob, catalog: str,
     code, timestamp_formats = fix_timestamp_to_string_format(code, job)
     code, date_format_cases = fix_date_format_pattern_case(code)
     code, string_to_date_casts = fix_string_to_date_cast(code, job)
+    code, date_from_days_since = fix_date_from_days_since(code, job)
     code, bare_numeric_casts = fix_bare_numeric_cast(code, job)
     # Aggregator functions must be fixed before numeric casts are added: the MIN(...)
     # pattern it looks for only matches a bare (optionally qualified) column reference, and
@@ -742,6 +919,10 @@ def fix_job(job_name: str, notebook_path: Path, job: CondensedJob, catalog: str,
     code, aggregator_fixes = fix_aggregator_functions(code, job)
     code, numeric_casts = fix_numeric_casts(code, job)
     code, coalesce_wraps = fix_nonnullable_string_coalesce(code, job)
+    # Must run after every other per-column fix: each extra UNION ALL branch is built by
+    # copying the first branch's already-fixed SELECT list and swapping only the source
+    # link name, so it only carries the right casts/coalesce wrapping if they're already there.
+    code, funnel_unions = fix_funnel_union_all(code, job)
     code, delta_writes, tables = fix_csv_writes_to_delta(code, catalog, schema)
 
     try:
@@ -756,9 +937,10 @@ def fix_job(job_name: str, notebook_path: Path, job: CondensedJob, catalog: str,
             "blankAttributeRefs": blank_attrs, "resolvedSourcePaths": resolved_paths,
             "headStages": head_stages, "timestampFormats": timestamp_formats,
             "dateFormatCases": date_format_cases, "stringToDateCasts": string_to_date_casts,
-            "bareNumericCasts": bare_numeric_casts,
+            "dateFromDaysSince": date_from_days_since, "bareNumericCasts": bare_numeric_casts,
             "aggregatorFunctions": aggregator_fixes, "numericCasts": numeric_casts,
-            "coalesceWraps": coalesce_wraps, "deltaWrites": delta_writes,
+            "coalesceWraps": coalesce_wraps, "funnelUnions": funnel_unions,
+            "deltaWrites": delta_writes,
         },
         "syntaxError": syntax_error,
     }
@@ -785,8 +967,8 @@ def run(args: argparse.Namespace) -> int:
         results.append(result)
 
     fix_keys = ["blankAttributeRefs", "resolvedSourcePaths", "headStages", "timestampFormats",
-                "dateFormatCases", "stringToDateCasts", "bareNumericCasts", "aggregatorFunctions",
-                "numericCasts", "coalesceWraps", "deltaWrites"]
+                "dateFormatCases", "stringToDateCasts", "dateFromDaysSince", "bareNumericCasts",
+                "aggregatorFunctions", "numericCasts", "coalesceWraps", "funnelUnions", "deltaWrites"]
     report = {
         "summary": {
             "jobsPatched": len(results),
