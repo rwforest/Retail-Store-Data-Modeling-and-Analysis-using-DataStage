@@ -1,79 +1,91 @@
-SELECT
-.invoice_date_key as invoice_date_key,
-.category as category,
-.sales_amount as sales_amount,
-.gross_profit as gross_profit,
-.line_cnt as line_cnt,
-.promo_id as promo_id,
-.discount_pct as discount_pct,
-.start_key as start_key,
-.end_key as end_key
-FROM
+CREATE OR REPLACE TEMP VIEW lnk_fact AS (
+  SELECT * FROM unitygo.retail_dw_dbxconv_dbsql.fact_sales
+);
 
-INNER JOIN  ON .category = .category
+CREATE OR REPLACE TEMP VIEW lnk_dim_promo AS (
+  SELECT * FROM unitygo.retail_dw_dbxconv_dbsql.dim_promotion
+);
 
+CREATE OR REPLACE TEMP VIEW lnk_fp AS (
 SELECT
-lnk_fp.invoice_date_key as invoice_date_key,
-lnk_fp.category as category,
-lnk_fp.sales_amount as sales_amount,
-lnk_fp.gross_profit as gross_profit,
-lnk_fp.line_cnt as line_cnt,
-lnk_fp.promo_id as promo_id,
-lnk_fp.discount_pct as discount_pct,
-lnk_fp.start_key as start_key,
-lnk_fp.end_key as end_key
+CAST(lnk_fact.invoice_date_key AS int) as invoice_date_key,
+coalesce(lnk_fact.category, '') as category,
+CAST(lnk_fact.sales_amount AS decimal(18,2)) as sales_amount,
+CAST(lnk_fact.gross_profit AS decimal(18,2)) as gross_profit,
+CAST(lnk_fact.line_cnt AS int) as line_cnt,
+coalesce(lnk_dim_promo.promo_id, '') as promo_id,
+CAST(lnk_dim_promo.discount_pct AS int) as discount_pct,
+CAST(lnk_dim_promo.start_key AS int) as start_key,
+CAST(lnk_dim_promo.end_key AS int) as end_key
+FROM lnk_fact INNER JOIN lnk_dim_promo ON coalesce(lnk_fact.category, '') = coalesce(lnk_dim_promo.category, '')
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_window AS (
+SELECT
+CAST(lnk_fp.invoice_date_key AS int) as invoice_date_key,
+coalesce(lnk_fp.category, '') as category,
+CAST(lnk_fp.sales_amount AS decimal(18,2)) as sales_amount,
+CAST(lnk_fp.gross_profit AS decimal(18,2)) as gross_profit,
+CAST(lnk_fp.line_cnt AS int) as line_cnt,
+coalesce(lnk_fp.promo_id, '') as promo_id,
+CAST(lnk_fp.discount_pct AS int) as discount_pct,
+CAST(lnk_fp.start_key AS int) as start_key,
+CAST(lnk_fp.end_key AS int) as end_key
 FROM
 lnk_fp
 WHERE invoice_date_key >= start_key and invoice_date_key <= end_key
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_promo AS (
 SELECT
-lnk_window.promo_id as promo_id,
-lnk_window.category as category,
-lnk_window.discount_pct as discount_pct,
-MIN(promo_sales) as promo_sales,
-MIN(promo_profit) as promo_profit,
-MIN(promo_lines) as promo_lines
+coalesce(lnk_window.promo_id, '') as promo_id,
+coalesce(lnk_window.category, '') as category,
+CAST(lnk_window.discount_pct AS int) as discount_pct,
+SUM(sales_amount) as promo_sales,
+SUM(gross_profit) as promo_profit,
+SUM(line_cnt) as promo_lines
 FROM
 lnk_window
 GROUP BY
-lnk_window.promo_id,
-lnk_window.category,
-lnk_window.discount_pct
+coalesce(lnk_window.promo_id, ''),
+coalesce(lnk_window.category, ''),
+CAST(lnk_window.discount_pct AS int)
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_cost AS (
 SELECT
-lnk_promo.promo_id as promo_id,
-lnk_promo.category as category,
-lnk_promo.discount_pct as discount_pct,
-lnk_promo.promo_sales as promo_sales,
-lnk_promo.promo_profit as promo_profit,
-lnk_promo.promo_lines as promo_lines,
-lnk_promo.promo_sales * lnk_promo.discount_pct / 100 as est_discount_cost,
-lnk_promo.promo_profit - ( lnk_promo.promo_sales * lnk_promo.discount_pct / 100 ) as profit_after_discount
+coalesce(lnk_promo.promo_id, '') as promo_id,
+coalesce(lnk_promo.category, '') as category,
+CAST(lnk_promo.discount_pct AS int) as discount_pct,
+CAST(lnk_promo.promo_sales AS decimal(18,2)) as promo_sales,
+CAST(lnk_promo.promo_profit AS decimal(18,2)) as promo_profit,
+CAST(lnk_promo.promo_lines AS bigint) as promo_lines,
+CAST(lnk_promo.promo_sales AS decimal(18,2)) * CAST(lnk_promo.discount_pct AS int) / 100 as est_discount_cost,
+CAST(lnk_promo.promo_profit AS decimal(18,2)) - ( CAST(lnk_promo.promo_sales AS decimal(18,2)) * CAST(lnk_promo.discount_pct AS int) / 100 ) as profit_after_discount
 FROM
 lnk_promo
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_sorted AS (
 SELECT
-lnk_cost.promo_id as promo_id,
-lnk_cost.category as category,
-lnk_cost.discount_pct as discount_pct,
-lnk_cost.promo_sales as promo_sales,
-lnk_cost.promo_profit as promo_profit,
-lnk_cost.promo_lines as promo_lines,
-lnk_cost.est_discount_cost as est_discount_cost,
-lnk_cost.profit_after_discount as profit_after_discount
+coalesce(lnk_cost.promo_id, '') as promo_id,
+coalesce(lnk_cost.category, '') as category,
+CAST(lnk_cost.discount_pct AS int) as discount_pct,
+CAST(lnk_cost.promo_sales AS decimal(18,2)) as promo_sales,
+CAST(lnk_cost.promo_profit AS decimal(18,2)) as promo_profit,
+CAST(lnk_cost.promo_lines AS bigint) as promo_lines,
+CAST(lnk_cost.est_discount_cost AS decimal(18,2)) as est_discount_cost,
+CAST(lnk_cost.profit_after_discount AS decimal(18,2)) as profit_after_discount
 FROM
 lnk_cost
 ORDER BY profit_after_discount desc
 
-SELECT CONCAT_WS(',',
-lnk_sorted.promo_id,
-lnk_sorted.category,
-lnk_sorted.discount_pct,
-lnk_sorted.promo_sales,
-lnk_sorted.promo_profit,
-lnk_sorted.promo_lines,
-lnk_sorted.est_discount_cost,
-lnk_sorted.profit_after_discount)
-FROM
-lnk_sorted
+);
 
+CREATE OR REPLACE TABLE unitygo.retail_dw_dbxconv_dbsql.Promo_Effectiveness AS
+SELECT
+  *
+FROM lnk_sorted;

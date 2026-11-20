@@ -1,75 +1,73 @@
-SELECT
-.invoice_no as invoice_no,
-.customer_id as customer_id,
-.customer_sk as customer_sk,
-.store_sk as store_sk,
-.employee_sk as employee_sk,
-.invoice_date_key as invoice_date_key,
-.year_month as year_month,
-MIN(invoice_sales) as invoice_sales,
-MIN(invoice_profit) as invoice_profit,
-MIN(item_qty) as item_qty,
-MIN(line_total) as line_total
-FROM
+CREATE OR REPLACE TEMP VIEW lnk_fact AS (
+  SELECT * FROM unitygo.retail_dw_dbxconv_dbsql.fact_sales
+);
 
-GROUP BY
-.invoice_no,
-.customer_id,
-.customer_sk,
-.store_sk,
-.employee_sk,
-.invoice_date_key,
-.year_month
-
+CREATE OR REPLACE TEMP VIEW lnk_inv AS (
 SELECT
-lnk_inv.invoice_no as invoice_no,
-lnk_inv.customer_id as customer_id,
-lnk_inv.customer_sk as customer_sk,
-lnk_inv.store_sk as store_sk,
-lnk_inv.employee_sk as employee_sk,
-lnk_inv.invoice_date_key as invoice_date_key,
-lnk_inv.year_month as year_month,
-lnk_inv.invoice_sales as invoice_sales,
-lnk_inv.invoice_profit as invoice_profit,
-lnk_inv.item_qty as item_qty,
-lnk_inv.line_total as line_total,
-IF ( lnk_inv.line_total > 0 , lnk_inv.invoice_sales / lnk_inv.line_total , 0 ) as avg_line_value,
+coalesce(lnk_fact.invoice_no, '') as invoice_no,
+CAST(lnk_fact.customer_id AS int) as customer_id,
+CAST(lnk_fact.customer_sk AS int) as customer_sk,
+CAST(lnk_fact.store_sk AS int) as store_sk,
+CAST(lnk_fact.employee_sk AS int) as employee_sk,
+CAST(lnk_fact.invoice_date_key AS int) as invoice_date_key,
+coalesce(lnk_fact.year_month, '') as year_month,
+SUM(sales_amount) as invoice_sales,
+SUM(gross_profit) as invoice_profit,
+SUM(quantity) as item_qty,
+SUM(line_cnt) as line_total
+FROM lnk_fact GROUP BY
+coalesce(lnk_fact.invoice_no, ''),
+CAST(lnk_fact.customer_id AS int),
+CAST(lnk_fact.customer_sk AS int),
+CAST(lnk_fact.store_sk AS int),
+CAST(lnk_fact.employee_sk AS int),
+CAST(lnk_fact.invoice_date_key AS int),
+coalesce(lnk_fact.year_month, '')
+
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_basket AS (
+SELECT
+coalesce(lnk_inv.invoice_no, '') as invoice_no,
+CAST(lnk_inv.customer_id AS int) as customer_id,
+CAST(lnk_inv.customer_sk AS int) as customer_sk,
+CAST(lnk_inv.store_sk AS int) as store_sk,
+CAST(lnk_inv.employee_sk AS int) as employee_sk,
+CAST(lnk_inv.invoice_date_key AS int) as invoice_date_key,
+coalesce(lnk_inv.year_month, '') as year_month,
+CAST(lnk_inv.invoice_sales AS decimal(18,2)) as invoice_sales,
+CAST(lnk_inv.invoice_profit AS decimal(18,2)) as invoice_profit,
+CAST(lnk_inv.item_qty AS bigint) as item_qty,
+CAST(lnk_inv.line_total AS bigint) as line_total,
+IF ( CAST(lnk_inv.line_total AS bigint) > 0 , CAST(lnk_inv.invoice_sales AS decimal(18,2)) / CAST(lnk_inv.line_total AS bigint) , 0 ) as avg_line_value,
 1 as invoice_cnt
 FROM
 lnk_inv
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_sorted AS (
 SELECT
-lnk_basket.invoice_no as invoice_no,
-lnk_basket.customer_id as customer_id,
-lnk_basket.customer_sk as customer_sk,
-lnk_basket.store_sk as store_sk,
-lnk_basket.employee_sk as employee_sk,
-lnk_basket.invoice_date_key as invoice_date_key,
-lnk_basket.year_month as year_month,
-lnk_basket.invoice_sales as invoice_sales,
-lnk_basket.invoice_profit as invoice_profit,
-lnk_basket.item_qty as item_qty,
-lnk_basket.line_total as line_total,
-lnk_basket.avg_line_value as avg_line_value,
-lnk_basket.invoice_cnt as invoice_cnt
+coalesce(lnk_basket.invoice_no, '') as invoice_no,
+CAST(lnk_basket.customer_id AS int) as customer_id,
+CAST(lnk_basket.customer_sk AS int) as customer_sk,
+CAST(lnk_basket.store_sk AS int) as store_sk,
+CAST(lnk_basket.employee_sk AS int) as employee_sk,
+CAST(lnk_basket.invoice_date_key AS int) as invoice_date_key,
+coalesce(lnk_basket.year_month, '') as year_month,
+CAST(lnk_basket.invoice_sales AS decimal(18,2)) as invoice_sales,
+CAST(lnk_basket.invoice_profit AS decimal(18,2)) as invoice_profit,
+CAST(lnk_basket.item_qty AS bigint) as item_qty,
+CAST(lnk_basket.line_total AS bigint) as line_total,
+CAST(lnk_basket.avg_line_value AS decimal(18,2)) as avg_line_value,
+CAST(lnk_basket.invoice_cnt AS int) as invoice_cnt
 FROM
 lnk_basket
 ORDER BY invoice_no asc
 
-SELECT CONCAT_WS(',',
-lnk_sorted.invoice_no,
-lnk_sorted.customer_id,
-lnk_sorted.customer_sk,
-lnk_sorted.store_sk,
-lnk_sorted.employee_sk,
-lnk_sorted.invoice_date_key,
-lnk_sorted.year_month,
-lnk_sorted.invoice_sales,
-lnk_sorted.invoice_profit,
-lnk_sorted.item_qty,
-lnk_sorted.line_total,
-lnk_sorted.avg_line_value,
-lnk_sorted.invoice_cnt)
-FROM
-lnk_sorted
+);
 
+CREATE OR REPLACE TABLE unitygo.retail_dw_dbxconv_dbsql.fact_invoice AS
+SELECT
+  *
+FROM lnk_sorted;

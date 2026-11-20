@@ -1,204 +1,364 @@
 {
   "summary": {
-    "jobsPatched": 24,
+    "jobsPatched": 23,
+    "jobsWithUnresolvedStatements": 0,
     "totalEreplaceCalls": 3,
     "totalLenCalls": 3,
+    "totalNullToValueCalls": 34,
+    "totalWidgetDefaults": 8,
     "totalStringConcats": 28,
     "totalBareNumericCasts": 5,
-    "totalDateFormatCases": 4
+    "totalDateFormatCases": 4,
+    "totalTimestampToStringFormats": 3,
+    "totalNumericCasts": 1409,
+    "totalStringToDateCasts": 9,
+    "totalNonnullableStringCoalesces": 1181
   },
   "jobs": [
     {
       "job": "J01_Land_Orders",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 2,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 3,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 1,
+      "numericCasts": 80,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 90
     },
     {
       "job": "J02_Land_Customers",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 28,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 34,
+      "stringToDateCasts": 2,
+      "nonnullableStringCoalesces": 54
     },
     {
       "job": "J03_Land_Products",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 1,
+      "nullToValueCalls": 4,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 34,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 62
     },
     {
       "job": "J04_Land_Stores_Employees",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 1,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 7,
+      "stringToDateCasts": 2,
+      "nonnullableStringCoalesces": 30
     },
     {
       "job": "J05_Dim_Customer_Initial",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 16,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 14
     },
     {
       "job": "J06_Dim_Customer_SCD2",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 2,
       "lenCalls": 0,
+      "nullToValueCalls": 16,
+      "widgetDefaults": 2,
       "stringConcats": 0,
       "bareNumericCasts": 2,
-      "dateFormatCases": 1
+      "dateFormatCases": 1,
+      "timestampToStringFormats": 0,
+      "numericCasts": 258,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 212
     },
     {
       "job": "J07_Dim_Product",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 31,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 63
     },
     {
       "job": "J08_Dim_Store_Employee",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 16,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 26
     },
     {
       "job": "J09_Dim_Date_Promo_FX",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 1,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 3
+      "dateFormatCases": 3,
+      "timestampToStringFormats": 0,
+      "numericCasts": 11,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 11
     },
     {
       "job": "J10_Fact_Sales",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 9,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 1,
+      "numericCasts": 205,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 168
     },
     {
       "job": "J11_Fact_Returns",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 3,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 1,
+      "numericCasts": 64,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 52
     },
     {
       "job": "J12_Fact_Invoice",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 33,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 8
     },
     {
       "job": "J13_Mart_RETAIL_DATA_MART",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 115,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 81
     },
     {
       "job": "J14_Analysis_Employee_Transactions",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 56,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 40
     },
     {
       "job": "J15_Analysis_CustomerType_Profit",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 9,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 5
     },
     {
       "job": "J16_Bonus_Program",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 36,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 29
     },
     {
       "job": "J17_Mart_Customer_360",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 1,
+      "widgetDefaults": 5,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 145,
+      "stringToDateCasts": 5,
+      "nonnullableStringCoalesces": 43
     },
     {
       "job": "J18_Mart_Product_Performance",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 1,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 59,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 20
     },
     {
       "job": "J19_Mart_Basket_Affinity",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 15,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 38
     },
     {
       "job": "J20_Mart_Store_Monthly",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 27,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 14
     },
     {
       "job": "J21_Mart_Promo_Effectiveness",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 31,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 14
     },
     {
       "job": "J22_DQ_Fact_Checks",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 109,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 93
     },
     {
       "job": "J23_Reconcile_Source_To_Fact",
+      "unresolvedStatements": 0,
       "ereplaceCalls": 0,
       "lenCalls": 0,
+      "nullToValueCalls": 0,
+      "widgetDefaults": 0,
       "stringConcats": 0,
       "bareNumericCasts": 0,
-      "dateFormatCases": 0
-    },
-    {
-      "job": "Seq_Retail_DW_Master",
-      "ereplaceCalls": 0,
-      "lenCalls": 0,
-      "stringConcats": 0,
-      "bareNumericCasts": 0,
-      "dateFormatCases": 0
+      "dateFormatCases": 0,
+      "timestampToStringFormats": 0,
+      "numericCasts": 18,
+      "stringToDateCasts": 0,
+      "nonnullableStringCoalesces": 14
     }
   ]
 }

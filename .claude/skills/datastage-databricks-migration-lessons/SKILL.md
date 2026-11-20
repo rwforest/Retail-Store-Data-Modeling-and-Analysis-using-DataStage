@@ -1,6 +1,6 @@
 ---
 name: datastage-databricks-migration-lessons
-description: Lessons learned migrating DataStage to Databricks in this repo (migration/) -- debugging methodology, BladeBridge/dbxconv's systematic output defects and their generalized fixes for both its SPARKSQL target (14 defects, fully fixed and deployed) and its DBSQL target (5 textual defects fixed; two deeper structural problems investigated and found genuinely hard, not yet fixed -- know this before attempting them again), a self-correction lesson about this repo's own fixer tooling (outer-join coalescing), Spark/PySpark/Databricks gotchas, and safety rules for scoping work to an LLM transpiler (Lakebridge Switch). Use before touching dbxconv/BladeBridge conversion output (either target), fix_dbxconv_output.py, fix_dbxconv_dbsql_output.py, triage_for_switch.py, optimize.py, or common.py; before debugging a DataStage-derived Spark/SQL job that runs but produces wrong data, or one that fails with an opaque platform error; before deploying/reconciling two independently-produced implementations of the same pipeline; before building a name-based fix over a condensed job model with multiple similarly-shaped sources; or before deciding what to send to an LLM-based transpiler at scale.
+description: Lessons learned migrating DataStage to Databricks in this repo (migration/) -- debugging methodology, BladeBridge/dbxconv's systematic output defects and their generalized fixes for both its SPARKSQL target (14 defects, fully fixed and deployed, 41/42 reconciled) and its DBSQL target (11 defects fixed, plus a reconstruction engine that makes the otherwise-fragmentary output executable, also 41/42 reconciled), a self-correction lesson about this repo's own fixer tooling (outer-join coalescing), Spark/PySpark/Databricks gotchas, and safety rules for scoping work to an LLM transpiler (Lakebridge Switch). Use before touching dbxconv/BladeBridge conversion output (either target), fix_dbxconv_output.py, fix_dbxconv_dbsql_output.py, triage_for_switch.py, optimize.py, or common.py; before debugging a DataStage-derived Spark/SQL job that runs but produces wrong data, or one that fails with an opaque platform error; before deploying/reconciling two independently-produced implementations of the same pipeline; before building a content-matching heuristic over a fragmentary converter output; before building a name-based fix over a condensed job model with multiple similarly-shaped sources; or before deciding what to send to an LLM-based transpiler at scale.
 ---
 
 # DataStage -> Databricks migration: lessons learned
@@ -15,8 +15,9 @@ first -- every fixer/analyzer in this package parses jobs the same way; don't in
 parser.
 
 Full writeups: `migration/README.md` §8c (dbxconv SPARKSQL target's 14 defects, deployment,
-reconciliation), §8d (dbxconv DBSQL target's 5 fixed defects and the 2 found genuinely
-hard), §7.3-7.4 (SDP lessons), §6 (reconciliation caveats), §8 (open items);
+reconciliation), §8d (dbxconv DBSQL target's 11 defects, the reconstruction engine, and its
+own 41/42 reconciliation), §7.3-7.4 (SDP lessons), §6 (reconciliation caveats), §8 (open
+items);
 `migration/lakebridge_workflow/README.md` (per-tool docs, complexity/optimization scoring).
 This skill is the condensed, reusable version -- read the README sections above for full
 narrative and numbers.
@@ -159,39 +160,81 @@ path missing its `f`-string prefix, seen but not pursued) -- don't assume these 
 apply unchanged if you switch targets; re-derive from scratch by reading that target's
 generated code first. DBSQL target output now has its own fixer, below.
 
-## BladeBridge `dbxconv`'s DBSQL target: 5 fixed, 2 found to be genuinely hard
+## BladeBridge `dbxconv`'s DBSQL target: 11 defects plus a reconstruction engine, 41/42 reconciled
 
 Fixed in [`fix_dbxconv_dbsql_output.py`](../../migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_dbsql_output.py)
 (`lakebridge-workflow fix-dbxconv-dbsql`) -- a **separate module** from the SPARKSQL fixer on
 purpose, not a shared one with a target flag: DBSQL's raw output is a plain `.sql` script
 with no per-stage comments, no notebook cells, no Python at all -- a fundamentally different
-shape, not a variant of SPARKSQL's. Full table and evidence: README §8d.
+shape, not a variant of SPARKSQL's, and (unlike SPARKSQL's unsubstituted-but-present
+`load(f'''%PATH%''')`) not runnable at all as generated: no `;` between statements, nothing
+names any intermediate result, and every source read has a completely blank `FROM` and no
+column qualifier. An earlier pass concluded this needed real knowledge of dbxconv's own
+statement-emission rules, not a pattern-matching guess, and stopped there; that knowledge
+was then actually built (below). Full table, deployment mechanics, and reconciliation
+evidence: README §8d.
+
+**Eleven textual, per-expression defects**, same class as the SPARKSQL fixer's own:
 
 1. `Ereplace(x, old, new)` (DataStage's string-replace) is left untranslated -- not a real Databricks SQL function. Renamed to `REPLACE`.
 2. `Len(x)` is left untranslated the same way. Renamed to `LENGTH`.
-3. DataStage's `:` string-concatenation operator becomes a literal `+` (`A + '|' + B` instead of `A || '|' || B`) -- wrong under ANSI mode once a term isn't numeric-coercible. Fixed only on a line whose target column's own derivation actually used `:`, with the fix's `+`-count checked against the derivation's `:`-count first, so a genuinely numeric `+` elsewhere on the same line is never touched.
-4. `StringToDecimal(x)` becomes a bare `CAST(x AS numeric)` -- same `DECIMAL(10,0)` defect as the SPARKSQL fixer's own #12, reproduced identically.
-5. `date_format()` patterns are all upper-case -- same defect as the SPARKSQL fixer's own #9, reproduced identically.
+3. `NullToValue(x, default)` is left untranslated the same way -- found only by deploying (`UNRESOLVED_ROUTINE`), not by reading the code; a 2-argument call looks complete either way. Renamed to `COALESCE`.
+4. A run-parameter widget reference (`pEffDate`, `pRunDate`) survives as a bare `{widgetName}` placeholder -- the SPARKSQL notebook resolves the same token via `dbutils.widgets.get(...)`, but a plain SQL script run as a Jobs SQL-file task has no such mechanism. Casting the literal string `"{pEffDate}"` to `date`/`int` doesn't error, it just returns `NULL` -- invisible until the result feeds a join. Resolved from the widget's own declared default in the condensed job model (`job.parameters`).
+5. DataStage's `:` string-concatenation operator becomes a literal `+` (`A + '|' + B` instead of `A || '|' || B`) -- wrong under ANSI mode once a term isn't numeric-coercible. Fixed only on a line whose target column's own derivation actually used `:`, with the fix's `+`-count checked against the derivation's `:`-count first, so a genuinely numeric `+` elsewhere on the same line is never touched.
+6. `StringToDecimal(x)` becomes a bare `CAST(x AS numeric)` -- same `DECIMAL(10,0)` defect as the SPARKSQL fixer's own #12, reproduced identically.
+7. `date_format()` patterns are all upper-case -- same defect as the SPARKSQL fixer's own #9, reproduced identically.
+8. `TimestampToString(ts, fmt)` loses its format, becoming `CAST(x AS STRING)` -- same defect as the SPARKSQL fixer's own #7. Found by deploying and reconciling, not reading the code: a date key built this way fed a point-in-time join's own range filter (`customer_sk is null or (eff_start_key <= invoice_date_key and eff_end_key >= invoice_date_key)`), and comparing a real date boundary against a never-reformatted timestamp string is `NULL`, not `true`/`false` -- so the `OR`'s second branch never fires for a row whose join genuinely matched. `fact_sales` collapsed from 32575 to 9106 rows, every survivor's `customer_sk` defaulted to `-1`. **General lesson: a date/timestamp column that silently becomes `NULL` downstream of a lost-format defect doesn't just show up as a wrong value in that column -- it can look like a join or row-count bug several stages later, because `NULL` on either side of a range comparison fails the comparison instead of raising an error.**
+9. Numeric columns never cast unless the derivation already had a function call -- same defect as the SPARKSQL fixer's own #12. Must run *after* reconstruction (below), not before: it matches a qualified `lnk_x.col` reference, and a fused source's qualifier doesn't exist in the raw text until reconstruction adds it. Got this wrong once already in this same module (ran it before reconstruction first, silently matched nothing for every fused-source consumer) -- **general lesson: any fix keyed on a qualified `link.column` reference has to run after whatever step introduces that qualifier, never before, and "it ran with no errors" doesn't mean it matched anything.**
+10. `StringToDate(value, fmt)` loses its format the same way `TimestampToString` does, becoming a bare `cast(value AS date)` -- works by coincidence on ISO-formatted input (most occurrences in this repo), breaks on a `yyyyMMdd` date key. Same after-reconstruction ordering constraint as #9.
+11. DataStage's empty-string-vs-NULL semantics (a non-nullable source string column reads as `""` in DataStage but `NULL` from Databricks SQL's CSV reader) -- same defect as the SPARKSQL fixer's own #9/`fix_nonnullable_string_coalesce`. Found by reconciling `stg_orders` itself, the most upstream table in the whole pipeline, not a downstream one -- a defect doesn't have to be subtle to survive several fix passes if nothing happens to exercise it until you check the landing table directly. A guest checkout's empty `CustomerID` produced `customer_id = NULL`/`is_guest = 0` instead of `'0'`/`1`, cascading into every join keyed on `customer_id`. Runs last of the eleven, after #9/#10, so it can never interfere with their exact-text matches.
 
-**Two things investigated at length and deliberately left unfixed, not just unexplored:**
+**The reconstruction engine** (`reconstruct_job` and everything it calls) is what makes the
+output executable at all, on top of the eleven textual fixes. Three interacting rules,
+discovered against a clean test case with no `PxCopy`/`PxFunnel` ambiguity
+(`J05_Dim_Customer_Initial`, 4 stages) and validated to zero-unmatched/zero-unused across
+all 23 jobs before trusting it:
 
-- **No `;` between statements, and nothing names any intermediate result** -- a later
-  statement's `FROM <link>` references a name no earlier statement defines. Recovering
-  which statement belongs to which DataStage link (needed to wrap each one in a named view)
-  was tried three ways against this repo's own SCD2 job -- file position, column-alias-list
-  matching, `FROM`-target-vs-declared-in-links cross-referencing -- and none held across the
-  whole file (see the debugging-methodology bullet above on verifying a correspondence holds
-  for the entire file).
-- **Every source read has a completely blank `FROM` and no column qualifier** (a bare
-  `.CustomerID`). The read mechanism itself is confirmed working (`read_files('<path>',
-  format => 'csv', header => false)` on a live SQL Warehouse). Resolving *which* source a
-  blank reference belongs to by field name is unsafe: checking for collisions first (see the
-  debugging-methodology bullet above) found most multi-source jobs in this repo reuse the
-  same field name across unrelated sources.
+- A stage with **no in-links** (a pure external or intermediate-table read) is never its
+  own statement -- it's fused into its direct consumer's statement.
+- A stage with **no out-links** (a file/audit target) becomes exactly one `SELECT
+  CONCAT_WS(',', col, ...) FROM <link>` row-dump.
+- `PxHead` (Top-N) has **no DBSQL handler at all** -- not even a broken statement, just a
+  `// No handler defined for type HEAD...` comment floating between two real statements,
+  belonging to neither (strip it before splitting on statement boundaries, or it silently
+  gets absorbed into whichever statement happens to precede it).
 
-Both need real knowledge of dbxconv's own statement-emission rules, or carefully isolated
-single-stage test jobs built to observe it cleanly -- not a pattern-matching guess against
-this pipeline's own, ambiguous output.
+Each generated statement is matched to its DataStage stage by a **content signature**
+(`(kind, FROM-target, column-alias-list)`), not file position -- dbxconv's own emission
+order is dependency-ready order, not DataStage's declaration order. A blank `FROM` is only
+tolerated when that stage's in-link traces to a fused source; everywhere else a blank `FROM`
+(or `FROM (` from a `RemoveDuplicates` subquery) needs filling from the fused name, not
+leaving alone. A double-fused join (both sides blank, overlapping field names, genuinely
+ambiguous from the generated text alone) is resolved from the condensed model directly: each
+output column's own `derivation` text states which side it came from, and the join's own
+`key`/`operator` properties state the join condition, even when the generated text doesn't.
+
+**General lessons from building this, beyond the specific rules above:**
+
+- **A "no handler" comment or an obviously-fragmentary output doesn't mean the converter
+  gave up on that stage entirely** -- it can mean one specific stage *kind* has no code path
+  in that target's config, while the surrounding statements the SAME file still contain are
+  completely normal and need the SAME matching/wrapping logic as everything else. Don't
+  write off a whole job's output because one visible defect looks severe.
+- **Validate a content-matching heuristic against *every* file, not the one you built it
+  against.** The signature-matching approach here only became trustworthy after checking
+  zero-unmatched/zero-unused across all 23 jobs, not just the clean 4-stage test case it was
+  designed against -- a `RemoveDuplicates` stage's own nested `SELECT` broke the first,
+  naive statement-splitter (it also starts a line with `SELECT`, which a paren-depth-unaware
+  split treats as a new top-level statement), and a false `FROM (` match (a subquery opener,
+  never actually blank) silently ate the one real blank slot meant for a different stage.
+  Both only surfaced by running the matcher against the full set, not by reasoning about the
+  rules in the abstract.
+- **`read_files(...)`'s header-row-skip fix was needed a second time, in a second target.**
+  The SPARKSQL fixer's `header => 'false'` → `'true'` fix (§8c #3) is the exact same defect
+  as this target's source-synthesis needing `header => true` plus an explicit positional
+  `schema =>` override -- confirms the underlying DataStage semantics ("maps columns by
+  position, ignores header text") generalizes across target shapes, not just a
+  coincidence worth re-deriving from scratch each time.
 
 ## Spark / PySpark / Databricks gotchas (general, not dbxconv-specific)
 
@@ -279,7 +322,9 @@ candidate's correctness depends on sibling jobs before marking it independently 
   tasks -- includes `promote_dim_customer`), reconciliation notebook and result (41/42 tables
   match; the one holdout is `basket_affinity`'s pre-existing tie-break non-determinism),
   checked in as evidence (same convention as `switch_output*/`).
-- `migration/dbxconv_dbsql_output_fixed/` -- the 24 fixed (but not yet runnable) DBSQL `.sql`
-  files and fix report, checked in as evidence of what is and isn't fixed so far.
+- `migration/dbxconv_dbsql_output_fixed/` -- the 23 fixed/deployed/reconstructed DBSQL `.sql`
+  files, fix report, job spec, reconciliation script and result (41/42 tables match; same
+  `basket_affinity` holdout as SPARKSQL), checked in as evidence (same convention as
+  `dbxconv_output_fixed/`).
 - `migration/README.md` §8c (SPARKSQL) / §8d (DBSQL) -- full narrative, numbers, and the "what
   this does and doesn't prove" framing to reuse when reporting any reconciliation result.

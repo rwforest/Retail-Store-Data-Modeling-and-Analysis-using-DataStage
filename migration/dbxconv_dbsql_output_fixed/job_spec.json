@@ -1,0 +1,403 @@
+{
+  "run_name": "dbxconv_dbsql_fixed",
+  "tasks": [
+    {
+      "task_key": "J01_Land_Orders",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J01_Land_Orders.sql"
+        }
+      },
+      "depends_on": []
+    },
+    {
+      "task_key": "J02_Land_Customers",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J02_Land_Customers.sql"
+        }
+      },
+      "depends_on": []
+    },
+    {
+      "task_key": "J03_Land_Products",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J03_Land_Products.sql"
+        }
+      },
+      "depends_on": []
+    },
+    {
+      "task_key": "J04_Land_Stores_Employees",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J04_Land_Stores_Employees.sql"
+        }
+      },
+      "depends_on": []
+    },
+    {
+      "task_key": "J05_Dim_Customer_Initial",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J05_Dim_Customer_Initial.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J06_Dim_Customer_SCD2",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J06_Dim_Customer_SCD2.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J05_Dim_Customer_Initial"
+        }
+      ]
+    },
+    {
+      "task_key": "promote_dim_customer",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/_promote_dim_customer.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J06_Dim_Customer_SCD2"
+        }
+      ]
+    },
+    {
+      "task_key": "J07_Dim_Product",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J07_Dim_Product.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J08_Dim_Store_Employee",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J08_Dim_Store_Employee.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J09_Dim_Date_Promo_FX",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J09_Dim_Date_Promo_FX.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J01_Land_Orders"
+        },
+        {
+          "task_key": "J02_Land_Customers"
+        },
+        {
+          "task_key": "J03_Land_Products"
+        },
+        {
+          "task_key": "J04_Land_Stores_Employees"
+        }
+      ]
+    },
+    {
+      "task_key": "J10_Fact_Sales",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J10_Fact_Sales.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "promote_dim_customer"
+        },
+        {
+          "task_key": "J07_Dim_Product"
+        },
+        {
+          "task_key": "J08_Dim_Store_Employee"
+        },
+        {
+          "task_key": "J09_Dim_Date_Promo_FX"
+        }
+      ]
+    },
+    {
+      "task_key": "J11_Fact_Returns",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J11_Fact_Returns.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "promote_dim_customer"
+        },
+        {
+          "task_key": "J07_Dim_Product"
+        },
+        {
+          "task_key": "J08_Dim_Store_Employee"
+        },
+        {
+          "task_key": "J09_Dim_Date_Promo_FX"
+        }
+      ]
+    },
+    {
+      "task_key": "J12_Fact_Invoice",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J12_Fact_Invoice.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J10_Fact_Sales"
+        }
+      ]
+    },
+    {
+      "task_key": "J13_Mart_RETAIL_DATA_MART",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J13_Mart_RETAIL_DATA_MART.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J14_Analysis_Employee_Transactions",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J14_Analysis_Employee_Transactions.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J13_Mart_RETAIL_DATA_MART"
+        }
+      ]
+    },
+    {
+      "task_key": "J15_Analysis_CustomerType_Profit",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J15_Analysis_CustomerType_Profit.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J13_Mart_RETAIL_DATA_MART"
+        }
+      ]
+    },
+    {
+      "task_key": "J16_Bonus_Program",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J16_Bonus_Program.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J13_Mart_RETAIL_DATA_MART"
+        }
+      ]
+    },
+    {
+      "task_key": "J17_Mart_Customer_360",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J17_Mart_Customer_360.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J18_Mart_Product_Performance",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J18_Mart_Product_Performance.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J19_Mart_Basket_Affinity",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J19_Mart_Basket_Affinity.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J20_Mart_Store_Monthly",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J20_Mart_Store_Monthly.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J21_Mart_Promo_Effectiveness",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J21_Mart_Promo_Effectiveness.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J22_DQ_Fact_Checks",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J22_DQ_Fact_Checks.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    },
+    {
+      "task_key": "J23_Reconcile_Source_To_Fact",
+      "sql_task": {
+        "warehouse_id": "<warehouse_id>",
+        "file": {
+          "path": "/Workspace/Users/<you>/retail_dw_dbxconv_dbsql_fixed/J23_Reconcile_Source_To_Fact.sql"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "J11_Fact_Returns"
+        },
+        {
+          "task_key": "J12_Fact_Invoice"
+        }
+      ]
+    }
+  ]
+}

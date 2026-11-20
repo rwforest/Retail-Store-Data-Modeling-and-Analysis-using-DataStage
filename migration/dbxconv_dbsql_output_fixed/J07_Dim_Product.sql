@@ -1,3 +1,8 @@
+CREATE OR REPLACE TEMP VIEW lnk_stg AS (
+  SELECT * FROM unitygo.retail_dw_dbxconv_dbsql.stg_products
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_dedup AS (
 SELECT
 stock_code,
 product_name,
@@ -13,141 +18,144 @@ lead_time_days,
 reliability_score
 FROM (
 SELECT
-.stock_code as stock_code,
-.product_name as product_name,
-.category as category,
-.list_price as list_price,
-.supplier_id as supplier_id,
-.status as status,
-.unit_cost as unit_cost,
-.price_band as price_band,
-.supplier_name as supplier_name,
-.supplier_country as supplier_country,
-.lead_time_days as lead_time_days,
-.reliability_score as reliability_score,
-ROW_NUMBER() OVER(PARTITION BY .stock_code ORDER BY .product_name, .category, .list_price, .supplier_id, .status, .unit_cost, .price_band, .supplier_name, .supplier_country, .lead_time_days, .reliability_score) dedup_rnk
-FROM ) dedup_lnk_dedup WHERE dedup_rnk = 1
+coalesce(lnk_stg.stock_code, '') as stock_code,
+coalesce(lnk_stg.product_name, '') as product_name,
+coalesce(lnk_stg.category, '') as category,
+CAST(lnk_stg.list_price AS decimal(18,2)) as list_price,
+coalesce(lnk_stg.supplier_id, '') as supplier_id,
+coalesce(lnk_stg.status, '') as status,
+CAST(lnk_stg.unit_cost AS decimal(18,2)) as unit_cost,
+coalesce(lnk_stg.price_band, '') as price_band,
+coalesce(lnk_stg.supplier_name, '') as supplier_name,
+coalesce(lnk_stg.supplier_country, '') as supplier_country,
+CAST(lnk_stg.lead_time_days AS int) as lead_time_days,
+CAST(lnk_stg.reliability_score AS decimal(18,2)) as reliability_score,
+ROW_NUMBER() OVER(PARTITION BY coalesce(lnk_stg.stock_code, '') ORDER BY coalesce(lnk_stg.product_name, ''), coalesce(lnk_stg.category, ''), CAST(lnk_stg.list_price AS decimal(18,2)), coalesce(lnk_stg.supplier_id, ''), coalesce(lnk_stg.status, ''), CAST(lnk_stg.unit_cost AS decimal(18,2)), coalesce(lnk_stg.price_band, ''), coalesce(lnk_stg.supplier_name, ''), coalesce(lnk_stg.supplier_country, ''), CAST(lnk_stg.lead_time_days AS int), CAST(lnk_stg.reliability_score AS decimal(18,2))) dedup_rnk
+FROM lnk_stg) dedup_lnk_dedup WHERE dedup_rnk = 1
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_sorted AS (
 SELECT
-lnk_dedup.stock_code as stock_code,
-lnk_dedup.product_name as product_name,
-lnk_dedup.category as category,
-lnk_dedup.list_price as list_price,
-lnk_dedup.supplier_id as supplier_id,
-lnk_dedup.status as status,
-lnk_dedup.unit_cost as unit_cost,
-lnk_dedup.price_band as price_band,
-lnk_dedup.supplier_name as supplier_name,
-lnk_dedup.supplier_country as supplier_country,
-lnk_dedup.lead_time_days as lead_time_days,
-lnk_dedup.reliability_score as reliability_score
+coalesce(lnk_dedup.stock_code, '') as stock_code,
+coalesce(lnk_dedup.product_name, '') as product_name,
+coalesce(lnk_dedup.category, '') as category,
+CAST(lnk_dedup.list_price AS decimal(18,2)) as list_price,
+coalesce(lnk_dedup.supplier_id, '') as supplier_id,
+coalesce(lnk_dedup.status, '') as status,
+CAST(lnk_dedup.unit_cost AS decimal(18,2)) as unit_cost,
+coalesce(lnk_dedup.price_band, '') as price_band,
+coalesce(lnk_dedup.supplier_name, '') as supplier_name,
+coalesce(lnk_dedup.supplier_country, '') as supplier_country,
+CAST(lnk_dedup.lead_time_days AS int) as lead_time_days,
+CAST(lnk_dedup.reliability_score AS decimal(18,2)) as reliability_score
 FROM
 lnk_dedup
 ORDER BY stock_code asc
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_dim AS (
 SELECT
-lnk_sorted.stock_code as stock_code,
-lnk_sorted.product_name as product_name,
-lnk_sorted.category as category,
-lnk_sorted.list_price as list_price,
-lnk_sorted.supplier_id as supplier_id,
-lnk_sorted.status as status,
-lnk_sorted.unit_cost as unit_cost,
-lnk_sorted.price_band as price_band,
-lnk_sorted.supplier_name as supplier_name,
-lnk_sorted.supplier_country as supplier_country,
-lnk_sorted.lead_time_days as lead_time_days,
-lnk_sorted.reliability_score as reliability_score,
+coalesce(lnk_sorted.stock_code, '') as stock_code,
+coalesce(lnk_sorted.product_name, '') as product_name,
+coalesce(lnk_sorted.category, '') as category,
+CAST(lnk_sorted.list_price AS decimal(18,2)) as list_price,
+coalesce(lnk_sorted.supplier_id, '') as supplier_id,
+coalesce(lnk_sorted.status, '') as status,
+CAST(lnk_sorted.unit_cost AS decimal(18,2)) as unit_cost,
+coalesce(lnk_sorted.price_band, '') as price_band,
+coalesce(lnk_sorted.supplier_name, '') as supplier_name,
+coalesce(lnk_sorted.supplier_country, '') as supplier_country,
+CAST(lnk_sorted.lead_time_days AS int) as lead_time_days,
+CAST(lnk_sorted.reliability_score AS decimal(18,2)) as reliability_score,
 row_number() over (order by 1) as product_sk,
-IF ( lnk_sorted.category = 'Seasonal' , 'SEASONAL' , IF ( lnk_sorted.category = 'General Merchandise' , 'OTHER' , 'CORE' ) ) as category_group
+IF ( coalesce(lnk_sorted.category, '') = 'Seasonal' , 'SEASONAL' , IF ( coalesce(lnk_sorted.category, '') = 'General Merchandise' , 'OTHER' , 'CORE' ) ) as category_group
 FROM
 lnk_sorted
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_dim_cols AS (
 SELECT
-lnk_dim.stock_code as stock_code,
-lnk_dim.product_name as product_name,
-lnk_dim.category as category,
-lnk_dim.list_price as list_price,
-lnk_dim.supplier_id as supplier_id,
-lnk_dim.status as status,
-lnk_dim.unit_cost as unit_cost,
-lnk_dim.price_band as price_band,
-lnk_dim.supplier_name as supplier_name,
-lnk_dim.supplier_country as supplier_country,
-lnk_dim.lead_time_days as lead_time_days,
-lnk_dim.reliability_score as reliability_score,
-lnk_dim.product_sk as product_sk,
-lnk_dim.category_group as category_group
+coalesce(lnk_dim.stock_code, '') as stock_code,
+coalesce(lnk_dim.product_name, '') as product_name,
+coalesce(lnk_dim.category, '') as category,
+CAST(lnk_dim.list_price AS decimal(18,2)) as list_price,
+coalesce(lnk_dim.supplier_id, '') as supplier_id,
+coalesce(lnk_dim.status, '') as status,
+CAST(lnk_dim.unit_cost AS decimal(18,2)) as unit_cost,
+coalesce(lnk_dim.price_band, '') as price_band,
+coalesce(lnk_dim.supplier_name, '') as supplier_name,
+coalesce(lnk_dim.supplier_country, '') as supplier_country,
+CAST(lnk_dim.lead_time_days AS int) as lead_time_days,
+CAST(lnk_dim.reliability_score AS decimal(18,2)) as reliability_score,
+CAST(lnk_dim.product_sk AS int) as product_sk,
+coalesce(lnk_dim.category_group, '') as category_group
 FROM
 lnk_dim
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_dim_out AS (
 SELECT
-lnk_dim_cols.stock_code as stock_code,
-lnk_dim_cols.product_name as product_name,
-lnk_dim_cols.category as category,
-lnk_dim_cols.list_price as list_price,
-lnk_dim_cols.supplier_id as supplier_id,
-lnk_dim_cols.status as status,
-lnk_dim_cols.unit_cost as unit_cost,
-lnk_dim_cols.price_band as price_band,
-lnk_dim_cols.supplier_name as supplier_name,
-lnk_dim_cols.supplier_country as supplier_country,
-lnk_dim_cols.lead_time_days as lead_time_days,
-lnk_dim_cols.reliability_score as reliability_score,
-lnk_dim_cols.product_sk as product_sk,
-lnk_dim_cols.category_group as category_group
+coalesce(lnk_dim_cols.stock_code, '') as stock_code,
+coalesce(lnk_dim_cols.product_name, '') as product_name,
+coalesce(lnk_dim_cols.category, '') as category,
+CAST(lnk_dim_cols.list_price AS decimal(18,2)) as list_price,
+coalesce(lnk_dim_cols.supplier_id, '') as supplier_id,
+coalesce(lnk_dim_cols.status, '') as status,
+CAST(lnk_dim_cols.unit_cost AS decimal(18,2)) as unit_cost,
+coalesce(lnk_dim_cols.price_band, '') as price_band,
+coalesce(lnk_dim_cols.supplier_name, '') as supplier_name,
+coalesce(lnk_dim_cols.supplier_country, '') as supplier_country,
+CAST(lnk_dim_cols.lead_time_days AS int) as lead_time_days,
+CAST(lnk_dim_cols.reliability_score AS decimal(18,2)) as reliability_score,
+CAST(lnk_dim_cols.product_sk AS int) as product_sk,
+coalesce(lnk_dim_cols.category_group, '') as category_group
 FROM
 lnk_dim_cols
 
+);
+
+CREATE OR REPLACE TEMP VIEW lnk_audit_in AS (
 SELECT
-lnk_dim_cols.stock_code as stock_code,
-lnk_dim_cols.product_name as product_name,
-lnk_dim_cols.category as category,
-lnk_dim_cols.list_price as list_price,
-lnk_dim_cols.supplier_id as supplier_id,
-lnk_dim_cols.status as status,
-lnk_dim_cols.unit_cost as unit_cost,
-lnk_dim_cols.price_band as price_band,
-lnk_dim_cols.supplier_name as supplier_name,
-lnk_dim_cols.supplier_country as supplier_country,
-lnk_dim_cols.lead_time_days as lead_time_days,
-lnk_dim_cols.reliability_score as reliability_score,
-lnk_dim_cols.product_sk as product_sk,
-lnk_dim_cols.category_group as category_group
+coalesce(lnk_dim_cols.stock_code, '') as stock_code,
+coalesce(lnk_dim_cols.product_name, '') as product_name,
+coalesce(lnk_dim_cols.category, '') as category,
+CAST(lnk_dim_cols.list_price AS decimal(18,2)) as list_price,
+coalesce(lnk_dim_cols.supplier_id, '') as supplier_id,
+coalesce(lnk_dim_cols.status, '') as status,
+CAST(lnk_dim_cols.unit_cost AS decimal(18,2)) as unit_cost,
+coalesce(lnk_dim_cols.price_band, '') as price_band,
+coalesce(lnk_dim_cols.supplier_name, '') as supplier_name,
+coalesce(lnk_dim_cols.supplier_country, '') as supplier_country,
+CAST(lnk_dim_cols.lead_time_days AS int) as lead_time_days,
+CAST(lnk_dim_cols.reliability_score AS decimal(18,2)) as reliability_score,
+CAST(lnk_dim_cols.product_sk AS int) as product_sk,
+coalesce(lnk_dim_cols.category_group, '') as category_group
 FROM
 lnk_dim_cols
 
-SELECT CONCAT_WS(',',
-lnk_dim_out.stock_code,
-lnk_dim_out.product_name,
-lnk_dim_out.category,
-lnk_dim_out.list_price,
-lnk_dim_out.supplier_id,
-lnk_dim_out.status,
-lnk_dim_out.unit_cost,
-lnk_dim_out.price_band,
-lnk_dim_out.supplier_name,
-lnk_dim_out.supplier_country,
-lnk_dim_out.lead_time_days,
-lnk_dim_out.reliability_score,
-lnk_dim_out.product_sk,
-lnk_dim_out.category_group)
-FROM
-lnk_dim_out
+);
 
-
-
+CREATE OR REPLACE TABLE unitygo.retail_dw_dbxconv_dbsql.dim_product AS
 SELECT
-lnk_audit_in.category as category,
-MIN(products) as products
+  *
+FROM lnk_dim_out;
+
+CREATE OR REPLACE TEMP VIEW lnk_cat_counts AS (
+SELECT
+coalesce(lnk_audit_in.category, '') as category,
+COUNT(*) as products
 FROM
 lnk_audit_in
 GROUP BY
-lnk_audit_in.category
+coalesce(lnk_audit_in.category, '')
 
-SELECT CONCAT_WS(',',
-lnk_cat_counts.category,
-lnk_cat_counts.products)
-FROM
-lnk_cat_counts
+);
 
+CREATE OR REPLACE TABLE unitygo.retail_dw_dbxconv_dbsql.audit_products_by_category AS
+SELECT
+  *
+FROM lnk_cat_counts;

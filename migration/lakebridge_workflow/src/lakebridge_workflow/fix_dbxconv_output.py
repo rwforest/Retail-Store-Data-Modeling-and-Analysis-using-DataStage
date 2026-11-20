@@ -158,25 +158,12 @@ from pathlib import Path
 from typing import Any
 
 from .common import (
-    BALANCED_EXPR_RE_SRC, DATE_FORMAT_TOKENS, DECIMAL_SQL_TYPES, NUMERIC_SQL_TYPE_NAMES,
-    STRING_SQL_TYPES, CondensedJob, Stage, atomic_json, csv_escape, read_condensed_job,
-    spark_numeric_type, unwrap_dsx_value,
+    AGGREGATOR_KIND_RE, BALANCED_EXPR_RE_SRC, DATE_FORMAT_TOKENS, DECIMAL_SQL_TYPES,
+    FUNNEL_KIND_RE, HEAD_KIND_RE, JOIN_KIND_RE, NUMERIC_SQL_TYPE_NAMES, ORDER_BREAKING_KIND_RE,
+    SORT_KIND_RE, STRING_SQL_TYPES, CondensedJob, Stage, atomic_json, csv_escape,
+    find_stage_by_out_link, link_order, outer_join_nullable_links, read_condensed_job,
+    sort_order_clause, spark_numeric_type, unwrap_dsx_value,
 )
-
-# --- Stage-kind classification -----------------------------------------------------------
-# Same non-\b-boundary caveat as optimize.py: DataStage stage kinds concatenate words
-# (PxSort, PxJoin) or join them with underscores, so these match as plain substrings.
-SORT_KIND_RE = re.compile(r"sort", re.IGNORECASE)
-ORDER_BREAKING_KIND_RE = re.compile(r"join|aggregat|funnel", re.IGNORECASE)
-HEAD_KIND_RE = re.compile(r"head", re.IGNORECASE)
-AGGREGATOR_KIND_RE = re.compile(r"aggregat", re.IGNORECASE)
-FUNNEL_KIND_RE = re.compile(r"funnel", re.IGNORECASE)
-JOIN_KIND_RE = re.compile(r"join", re.IGNORECASE)
-
-# The exact pattern ds2spark.py's st_sort uses to pull key name + direction out of a Sort
-# stage's DSX-encoded "key" property (DataStage's \(1)/\(2)/\(3) field/value/subvalue marks;
-# see common.unwrap_dsx_value for the single-value case this is the multi-value cousin of).
-SORT_KEY_NAME_RE = re.compile(r"\\\(1\)\\\(3\)key\\\(2\)(\w+)")
 
 # The same DSX encoding ds2spark.py's st_agg already parses for an Aggregator's "reduce"
 # property: a source column name, followed by one or more (function, output column) pairs.
@@ -254,80 +241,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--schema", required=True, help="Unity Catalog schema for saveAsTable")
     p.add_argument("--out-dir", type=Path, required=True, help="where to write patched notebooks")
     return p.parse_args(argv)
-
-
-def outer_join_nullable_links(job: CondensedJob) -> set[str]:
-    """Link names that are the non-preserving side of some outer join in this job.
-
-    A DataStage ``PxJoin``'s ``operator`` property, plus its in-links' own DSX declaration
-    order (first in-link is the "left"/preserving side, second is "right"), determines which
-    in-link(s) can come out of the join as ``NULL`` even though the link's *own* column is
-    declared non-nullable as a plain table read: a ``leftouterjoin``'s second-and-later
-    in-links, a ``rightouterjoin``'s first in-link, or every in-link of a ``fullouterjoin``.
-    An ``innerjoin`` drops non-matching rows entirely rather than nulling a column, so it
-    never needs this treatment. Used by ``fix_nonnullable_string_coalesce`` so it never
-    coalesces away a join's own legitimate "no match" ``NULL`` before a pipeline's later
-    ``COALESCE(..., '<real default>')`` step gets to see it (see its docstring, point 9).
-    """
-    nullable_links: set[str] = set()
-    for stage in job.stages:
-        if not JOIN_KIND_RE.search(stage.kind):
-            continue
-        operator = stage.prop_map.get("operator", "").strip().lower()
-        in_links = [lk.link_name for lk in stage.links if lk.direction == "in"]
-        if operator == "leftouterjoin":
-            nullable_links.update(in_links[1:])
-        elif operator == "rightouterjoin":
-            nullable_links.update(in_links[:-1])
-        elif operator == "fullouterjoin":
-            nullable_links.update(in_links)
-    return nullable_links
-
-
-def link_order(job: CondensedJob) -> dict[str, str | None]:
-    """For every output link in the job, the SQL ORDER BY clause its rows carry (or None).
-
-    Mirrors ds2spark.py's own ``self.order`` tracking: a Sort stage defines a new order from
-    its key property; Join/Aggregator/Funnel break it; every other stage (Filter, Copy,
-    Transformer, RemoveDuplicates, Head, ...) just passes its input's order through.
-    """
-    order: dict[str, str | None] = {}
-    for stage in job.stages:
-        in_links = [lk for lk in stage.links if lk.direction == "in"]
-        out_links = [lk for lk in stage.links if lk.direction == "out"]
-        if not out_links:
-            continue
-        inherited = order.get(in_links[0].link_name) if in_links else None
-        if SORT_KIND_RE.search(stage.kind):
-            result = sort_order_clause(stage) or inherited
-        elif ORDER_BREAKING_KIND_RE.search(stage.kind):
-            result = None
-        else:
-            result = inherited
-        for lk in out_links:
-            order[lk.link_name] = result
-    return order
-
-
-def sort_order_clause(stage: Stage) -> str:
-    """"col1 DIR1, col2 DIR2, ..." from a Sort stage's DSX-encoded key property."""
-    raw = stage.prop_map.get("key", "")
-    keys = SORT_KEY_NAME_RE.findall(raw)
-    parts = []
-    for key in keys:
-        m = re.search(rf"key\\\(2\){re.escape(key)}\\\(2\)0(\\\(1\)\\\(3\)\\\(3\)asc\\\\desc\\\(2\)(\w+))?", raw)
-        direction = "DESC" if m and m.group(2) == "desc" else "ASC"
-        parts.append(f"{key} {direction}")
-    return ", ".join(parts)
-
-
-def find_stage_by_out_link(job: CondensedJob, kind_re: re.Pattern, out_link: str) -> Stage | None:
-    for stage in job.stages:
-        if not kind_re.search(stage.kind):
-            continue
-        if any(lk.direction == "out" and lk.link_name == out_link for lk in stage.links):
-            return stage
-    return None
 
 
 def fix_blank_attribute_refs(code: str) -> tuple[str, int]:

@@ -890,19 +890,25 @@ in under [`dbxconv_output_fixed/`](dbxconv_output_fixed/) as evidence, the same 
 
 ---
 
-## 8d. The DBSQL target: five fixed, two found to be genuinely hard, not just unexplored
+## 8d. The DBSQL target: eleven defects and a reconstruction engine, 41/42 reconciled
 
-§8c's `--target DBSQL` default (§8a.2) was never actually exercised end to end: every fix,
-deployment, and reconciliation up to this point used the `SPARKSQL` target, a Python
-notebook that needs Spark/Python compute (a cluster or serverless compute) to run no matter
-what else is fixed -- not a SQL Warehouse. Converting this repository's own 23 jobs with
-`DBSQL` for the first time (`run-dbxconv --target DBSQL`) found genuinely different defects
-from SPARKSQL's, in a target whose raw shape is also fundamentally different: one plain
-`.sql` file per job, no per-stage comments or markers of any kind (SPARKSQL's notebooks have
-a `# Component <link>, Type <KIND>, ...` header before every block), and no `;` between
-statements.
+§8c's `--target DBSQL` default (§8a.2) was not exercised end to end at first: the earliest
+fix pass, deployment, and reconciliation all used the `SPARKSQL` target, a Python notebook
+that needs Spark/Python compute (a cluster or serverless compute) no matter what else is
+fixed -- not a SQL Warehouse. Converting this repository's own 23 jobs with `DBSQL`
+(`run-dbxconv --target DBSQL`) found genuinely different defects from SPARKSQL's, in a
+target whose raw shape is also fundamentally different: one plain `.sql` file per job, no
+per-stage comments or markers of any kind (SPARKSQL's notebooks have a `# Component <link>,
+Type <KIND>, ...` header before every block), and -- unlike SPARKSQL's unsubstituted-but-at-
+least-present `load(f'''%PATH%''')` -- no `;` between statements, nothing names any
+intermediate result, and every source read has a completely blank `FROM` clause and no
+column qualifier at all (a bare `.CustomerID`). An earlier pass concluded the output
+couldn't be made to run without first understanding dbxconv's own statement-emission rules,
+not just pattern-matching the text, and left it there; that understanding was then actually
+built (below), and the target now deploys, runs, and reconciles the same way SPARKSQL's
+does.
 
-**Five defects, textual and generalizable, fixed in
+**Eleven defects, textual and generalizable, fixed in
 [`fix_dbxconv_dbsql_output.py`](lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_dbsql_output.py)
 (`lakebridge-workflow fix-dbxconv-dbsql`)** -- a separate module from the SPARKSQL fixer on
 purpose (a DBSQL-target defect is a different translation-table gap in a differently-shaped
@@ -912,54 +918,86 @@ artifact, not a variant of a SPARKSQL one):
 |---|---|---|
 | 1 | `Ereplace(x, old, new)` (DataStage's string-replace function) is left untranslated -- not a real Databricks SQL function name | Reading the code |
 | 2 | `Len(x)` (DataStage's string-length function) is left untranslated | Reading the code |
-| 3 | DataStage's `:` string-concatenation operator becomes a literal `+` (`A + '\|' + B` instead of `A \|\| '\|' \|\| B`) -- correctly recognized as an operator, wrong translation; fails under ANSI mode when a term isn't numeric-coercible | Reading the code, cross-checked against the derivation's own `:` count before touching a line, so a genuinely numeric `+` elsewhere is never touched |
-| 4 | `StringToDecimal(x)` becomes a bare `CAST(x AS numeric)` -- the same `DECIMAL(10, 0)` defect §8c's #12 already documents for SPARKSQL, reproduced identically here | Reading the code |
-| 5 | `date_format()` patterns are all upper-case -- the same defect §8c's #9 already documents for SPARKSQL, reproduced identically here | Reading the code |
+| 3 | `NullToValue(x, default)` (DataStage's null-coalesce function) is left untranslated | **Deploying**: `J03_Land_Products` failed with `UNRESOLVED_ROUTINE` -- nothing about the generated 2-argument call looks incomplete on its own |
+| 4 | A run-parameter widget reference (`pEffDate`, `pRunDate`) is left as a bare `{widgetName}` placeholder -- the SPARKSQL target's notebooks resolve the same token via `dbutils.widgets.get(...)`, but a plain SQL script run as a Jobs SQL-file task has no such mechanism, so it survives verbatim into the deployed script | **Deploying + reconciling**: `J06_Dim_Customer_SCD2`'s `eff_start_key` for every *changed* customer version (not the first) came out `NULL` -- casting the literal string `"{pEffDate}"` doesn't raise an error, it just returns `NULL` -- failing defect #8's own point-in-time join filter from the dimension side |
+| 5 | DataStage's `:` string-concatenation operator becomes a literal `+` (`A + '\|' + B` instead of `A \|\| '\|' \|\| B`) -- correctly recognized as an operator, wrong translation; fails under ANSI mode when a term isn't numeric-coercible | Reading the code, cross-checked against the derivation's own `:` count before touching a line, so a genuinely numeric `+` elsewhere is never touched |
+| 6 | `StringToDecimal(x)` becomes a bare `CAST(x AS numeric)` -- the same `DECIMAL(10, 0)` defect §8c's #12 already documents for SPARKSQL, reproduced identically here | Reading the code |
+| 7 | `date_format()` patterns are all upper-case -- the same defect §8c's #9 already documents for SPARKSQL, reproduced identically here | Reading the code |
+| 8 | `TimestampToString(ts, fmt)` loses its format entirely, becoming `CAST(x AS STRING)` -- the same defect §8c's #7 documents for SPARKSQL, reproduced identically here | **Deploying + reconciling**: `invoice_date_key` came out as a raw timestamp string instead of `yyyyMMdd`; a point-in-time customer join's own filter (`customer_sk is null or (eff_start_key <= invoice_date_key and eff_end_key >= invoice_date_key)`) compares that against a real date boundary, which is `NULL`, not `true`/`false`, for every row whose join genuinely matched -- `fact_sales` collapsed from 32575 to 9106 rows, every survivor's `customer_sk` defaulted to `-1` |
+| 9 | Numeric columns never cast unless the derivation already contained a function call -- the same defect §8c's #12 documents for SPARKSQL | **Deploying + reconciling**: `unit_cost` (a plain pass-through, no derivation function) carried floating-point artifacts (`0.21450000000000002` instead of `0.21`) |
+| 10 | `StringToDate(value, fmt)` loses its format the same way `TimestampToString` does, becoming a bare `cast(value AS date)` -- works by coincidence for an ISO-formatted widget parameter or source date, fails outright on a `yyyyMMdd` date key | **Deploying + reconciling**: `J17_Mart_Customer_360`'s `recency_days`/`r_score`, derived from a dimension's own `yyyyMMdd`-format `last_date_key` |
+| 11 | DataStage's empty-string-vs-NULL semantics (§4 #2): a non-nullable source string column reads as `""` in DataStage but `NULL` from Databricks SQL's CSV reader, silently breaking any `Len(Trim(x)) = 0` check | **Deploying + reconciling**: `stg_orders` itself, the most upstream table in the pipeline -- a guest checkout's empty `CustomerID` produced `customer_id = NULL`/`is_guest = 0` instead of `'0'`/`1`, cascading into every downstream join keyed on `customer_id` |
 
-Validated against all 24 jobs (23 parallel jobs + the master sequence): every fix applies
-cleanly, with exact, reproducible counts (3 `Ereplace`, 3 `Len`, 28 `+`-to-`\|\|` replacements
--- all in one job's hash-building expression --, 5 numeric-cast fixes, 4 date-format-case
-fixes). The fixed output is checked in under
-[`dbxconv_dbsql_output_fixed/`](dbxconv_dbsql_output_fixed/) as evidence.
+Validated against all 23 parallel jobs (the master sequence has no `Px*` stages of its own
+and is skipped -- its real output is a Workflow JSON, not SQL, per §8a.2): every fix applies
+cleanly, with exact, reproducible counts (3 `Ereplace`, 3 `Len`, 34 `NullToValue`, 8 widget
+defaults, 28 `+`-to-`\|\|` replacements, 5 numeric-cast fixes, 4 date-format-case fixes, 3
+`TimestampToString` restores, 1409 numeric casts, 9 `StringToDate` restores, 1181
+non-nullable-string coalesces).
 
-**Two things are *not* fixed, and not because they weren't tried -- both were investigated
-at length and found to be genuinely hard, with concrete evidence why:**
+**Making the output executable at all needed real knowledge of dbxconv's own
+statement-emission rules, not a text-pattern-matching guess.** A clean test case with no
+`PxCopy`/`PxFunnel` ambiguity (`J05_Dim_Customer_Initial`, 4 stages) revealed three
+interacting rules: a stage with no in-links (a pure external/intermediate-table read) is
+never its own statement, it's fused into its direct consumer's statement; a stage with no
+out-links (a file/audit target) becomes exactly one `SELECT CONCAT_WS(',', col, ...) FROM
+<link>` row-dump; and `PxHead` (Top-N) has no DBSQL handler at all -- not even a broken
+statement, just a `// No handler defined for type HEAD...` comment floating between two real
+statements, belonging to neither. Each dbxconv-generated statement is matched to its
+DataStage stage by a content signature (`(kind, FROM-target, column-alias-list)`, tolerating
+a blank `FROM` exactly when that stage's in-link traces to a fused source) rather than by
+file position, which isn't dbxconv's own emission order; validated to zero unmatched and
+zero unused statements across all 23 jobs before trusting it. `reconstruct_job` (and
+everything it calls) uses this to turn the fragmented output into one executable script per
+job: every statement wrapped in a named `CREATE OR REPLACE TEMP VIEW`, every target
+rewritten into a real `CREATE OR REPLACE TABLE` (the same CSV-dump-to-Delta-table
+re-targeting §8c's #10 already does for SPARKSQL), every blank source reference resolved via
+`read_files(...)` (confirmed live: `header => true` plus an explicit positional `schema =>`
+override skips the file's physical header row while keeping `_c0`/`_c1`/... column names,
+the same header-row fix §8c's #3 already documents, needed a second time here) or a plain
+table reference (an earlier job's intermediate output), and a double-fused join (both sides
+blank, overlapping field names -- genuinely ambiguous from the generated text alone)
+resolved from the condensed model directly: each output column's own `derivation` text
+states which side it came from, and the join stage's own `key`/`operator` properties state
+the join condition, even when the generated text doesn't.
 
-1. **The output still isn't runnable at all: no `;` between statements, and nothing names
-   any intermediate result**, confirmed for this repository's own jobs, not just the
-   external `jb_*`/`job-32.xml` samples §8a.4 already found this for. A later statement's
-   `FROM <link>` references a name no earlier statement ever defines via `CREATE VIEW` or
-   anything else. Recovering which statement corresponds to which DataStage link --
-   needed to wrap each one in a named view -- was tried three ways against the SCD2 job
-   (`J06_Dim_Customer_SCD2`): by file position, by matching each statement's own column-alias
-   list against the condensed job model's declared out-link columns, and by cross-referencing
-   each statement's `FROM` target against its stage's declared in-links. None held across the
-   whole file. A `PxCopy` (Replicate) stage with two output links emits two near-identical
-   statements that can't be told apart this way; at least one declared link (a plain external
-   read) has no statement anywhere matching its expected columns at all; and the file also
-   contains `SELECT CONCAT_WS(...)` statements that are neither producers nor consumers of any
-   pipeline link -- they're a file/audit target stage's own row-dump, a third statement shape
-   the first two heuristics don't account for.
-2. **Every source read (`PxSequentialFile` with no in-links) has a completely blank `FROM`
-   clause and no column qualifier** -- a bare `.CustomerID`, not even a placeholder the way
-   SPARKSQL's unsubstituted `load(f'''%PATH%''')` at least names the gap. The read mechanism
-   itself is confirmed working (`SELECT * FROM read_files('<path>', format => 'csv', header
-   => false)` on a live SQL Warehouse exposes positional columns as `_c0`, `_c1`, ... exactly
-   like Spark's own CSV reader), so the fix *looked* like a small one: find which source each
-   blank reference belongs to, from the column/field names mentioned around it. Checking for
-   collisions first -- confirming each field name in a blank reference maps to exactly one
-   source within its own job -- found the opposite: most multi-source jobs in this repository
-   reuse the same field name (`customer_id`, `country`, `stock_code`, ...) across two, three,
-   even four unrelated sources in the same file. Resolving a blank reference by field name
-   would silently pick the *wrong* source for a large fraction of occurrences. A confidently
-   wrong result is worse than the current clean, obvious failure (the same standard §7.2
-   already set for this project), so this was left alone rather than shipped as a guess.
+Two fixes needed reconstruction to have already run, not before it: `fix_numeric_casts` and
+`fix_string_to_date_cast` match a *qualified* `lnk_x.col` reference, and a fused source's
+qualifier doesn't exist in the raw text at all until reconstruction's own
+`qualify_bare_dot_fields` adds it (`fix_job` runs them after `reconstruct_job`, with an
+explicit comment on why).
 
-Both gaps need either real knowledge of dbxconv's own statement-emission rules (not
-recoverable from the output text alone, per the first finding) or carefully isolated
-single-stage test jobs built to observe that behavior without this repository's own
-ambiguity in the way -- not a pattern-matching guess against this pipeline's own output.
-See Open Items.
+Deployed as a one-time Databricks Jobs run (`databricks jobs submit`), the same 24-task
+dependency graph §8c's SPARKSQL deployment uses, but with `sql_task.file.path` instead of
+`notebook_task.notebook_path` -- which needs each `.sql` file uploaded as a plain workspace
+**file** object (`databricks workspace import --format RAW`, an explicit `.sql` extension in
+the path), not a **notebook** object (`--format SOURCE --language SQL`): `sql_task.file.path`
+can't fetch a notebook at all (`Unable to fetch SQL file from path`). Requires
+`--catalog`/`--schema` and `--src-dir` (the resolved `pSrcDir` widget value) baked in
+directly, the same one-time, non-reusable scope `dbxconv_output_fixed/job_spec.json` already
+has for the SPARKSQL deployment. **Result: 24/24 tasks succeed.**
+
+**Reconciled against `retail_dw_sdp`** the same way §8c's SPARKSQL deployment is (local
+Python driving `databricks api post /api/2.0/sql/statements` directly, since a SQL Warehouse
+has no cluster to run a comparison notebook on): the table lists match except for the same
+two SDP-only artifacts §8c's SPARKSQL reconciliation excludes (`dim_customer_history`,
+`dq_validation_results` -- confirmed absent from *both* dbxconv targets, not a DBSQL-specific
+gap). Of 42 common tables, **41 match exactly, 1 still differs** -- the same holdout as
+§8c's: `basket_affinity`, the same tie-break non-determinism §7.3 documents (a single-column
+`ORDER BY pair_count DESC` with no tie-break before `LIMIT 1000`), not a `dbxconv` defect,
+confirmed again independently by this target reaching the exact same outcome.
+
+Two independently-produced DataStage conversions of the same source (dbxconv's literal
+SPARKSQL and DBSQL translations) and an independent LLM-driven rewrite (SDP) now all agree
+on 41 of 42 tables, with the one disagreement explained by non-determinism in every
+implementation rather than a defect in any one of them -- the same kind of evidence §6 and
+§8c's own closing paragraph describe, now reproduced a third time from a differently-shaped
+target.
+
+The fixed SQL scripts, the fix report, the job spec, the reconciliation script, and its
+result are checked in under
+[`dbxconv_dbsql_output_fixed/`](dbxconv_dbsql_output_fixed/) as evidence, the same way
+`dbxconv_output_fixed/` and `switch_output*/` keep each attempt's output (§10).
 
 ---
 
@@ -982,9 +1020,10 @@ See Open Items.
   It means dropping `dim_customer`, `dim_customer_next` and `audit_scd2_customer` in `retail_dw_compiled` before the
   master job runs. Not done yet: it needs approval, because it deletes tables.
 - **Non-deterministic top-N in J19** (`basket_affinity`): sorted only by `pair_count`, so ties at the cutoff are
-  arbitrary in every implementation (§7.3) -- confirmed, not just inferred, by §8c's reconciliation: it's the
-  *only* one of 42 tables `dbxconv` and SDP still disagree on after every other defect was fixed. Adding a
-  tie-break (e.g. `stock_code`, `stock_code_b`) is a change to the source logic and should be agreed first.
+  arbitrary in every implementation (§7.3) -- confirmed, not just inferred, by both §8c's SPARKSQL reconciliation
+  and §8d's independent DBSQL reconciliation: it's the *only* one of 42 tables either `dbxconv` target still
+  disagrees with SDP on, after every other defect was fixed, in both cases. Adding a tie-break (e.g.
+  `stock_code`, `stock_code_b`) is a change to the source logic and should be agreed first.
 - **SDP files with invented defaults.** 20 of the 21 SDP files still contain the `src_dir` defaults added by
   Switch's fix-up step (§7.4). Regenerate them with `max_fix_attempts: 0`.
 - **Input-order surrogate keys** (`store_sk`, `employee_sk`, `promo_sk`) depend on file read order. Consider
@@ -1007,26 +1046,14 @@ See Open Items.
   source with the hundreds or thousands of jobs (or embedded queries) it's actually meant for, so the real
   percentage selected -- and whether 526k/23 tokens-per-job is even a reasonable starting estimate for a very
   different source -- is unverified at that scale.
-- **`fix_dbxconv_output.py` targets the SPARKSQL `dbxconv` output specifically; it's the only target deployed
-  and reconciled end to end.** `PYSPARK` target output (§8a.2) has at least some different defects of its own
-  (§3's earlier spot-check found a bare, unquoted `sep` identifier and a write path missing its `f`-string
-  prefix) and has still never been investigated further. `DBSQL` target output now has its own fixer
-  (`fix_dbxconv_dbsql_output.py`, §8d) for five defects, but is still not runnable at all even after those
-  fixes -- see the next two bullets, both from §8d.
-- **DBSQL output has no `;` between statements and nothing names any intermediate result** (§8d). Needs real
-  knowledge of dbxconv's own statement-emission rules (which stage kinds get their own named statement, which
-  get fused into a consumer, how a file/audit target's row-dump statement should be handled) -- not recoverable
-  from the output text alone; three different matching heuristics were tried against this repository's own
-  SCD2 job and none held across the whole file.
-- **DBSQL source reads have a completely blank `FROM` clause and no column qualifier, and resolving a blank
-  reference to the right source by field name is unsafe** (§8d): most multi-source jobs in this repository
-  reuse the same field name (`customer_id`, `country`, `stock_code`, ...) across multiple unrelated sources,
-  confirmed by checking every job for field-name collisions before attempting this fix. A wrong-source guess is
-  worse than the current clean failure.
-- **The dbxconv deployment is a one-time `jobs submit` run, not a reusable Asset Bundle.** Unlike `bundle/`,
-  `bundle_switch/`, and `bundle_sdp/`, there is no `databricks.yml`/resource YAML for the dbxconv implementation;
-  `dbxconv_output_fixed/job_spec.json` is a raw Jobs API payload built once for this validation, not deployed
-  through `databricks bundle deploy`.
+- **Two of `dbxconv`'s three targets are now deployed and reconciled end to end** (SPARKSQL, §8c; DBSQL, §8d),
+  each 41/42 against SDP with the same one non-deterministic holdout. `PYSPARK` target output (§8a.2) has at
+  least some different defects of its own (§3's earlier spot-check found a bare, unquoted `sep` identifier and
+  a write path missing its `f`-string prefix) and has still never been investigated further.
+- **Neither dbxconv deployment is a reusable Asset Bundle.** Unlike `bundle/`, `bundle_switch/`, and
+  `bundle_sdp/`, there is no `databricks.yml`/resource YAML for either dbxconv target; `dbxconv_output_fixed/
+  job_spec.json` and `dbxconv_dbsql_output_fixed/job_spec.json` are both raw Jobs API payloads built once for
+  their own validation run, not deployed through `databricks bundle deploy`.
 
 ---
 
@@ -1138,4 +1165,4 @@ Two operational notes. With two CLI profiles on the same host, Lakebridge's inne
 | `switch_output_sdp/`, `switch_output_sdp_v2/` | Switch SDP outputs (all 21 files, then the re-converted customer unit) |
 | `bundle_sdp/` | SDP implementation: one pipeline + an end-to-end job (pipeline → DQX validate → DQX compare) |
 | `dbxconv_output_fixed/` | `dbxconv`'s SPARKSQL-target 23 notebooks after `fix_dbxconv_output.py` (§8c), the job spec deployed, the reconciliation notebook, and its result; kept as evidence, same as `switch_output*/` |
-| `dbxconv_dbsql_output_fixed/` | `dbxconv`'s DBSQL-target 24 `.sql` files after `fix_dbxconv_dbsql_output.py` (§8d) and its fix report; not yet runnable (§8d), kept as evidence of what is and isn't fixed so far |
+| `dbxconv_dbsql_output_fixed/` | `dbxconv`'s DBSQL-target 23 `.sql` files after `fix_dbxconv_dbsql_output.py` (§8d), the fix report, the job spec deployed, the reconciliation script, and its result; kept as evidence, same as `dbxconv_output_fixed/` |
