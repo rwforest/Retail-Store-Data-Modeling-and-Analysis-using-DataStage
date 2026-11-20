@@ -1022,8 +1022,16 @@ result are checked in under
 - **Non-deterministic top-N in J19** (`basket_affinity`): sorted only by `pair_count`, so ties at the cutoff are
   arbitrary in every implementation (§7.3) -- confirmed, not just inferred, by both §8c's SPARKSQL reconciliation
   and §8d's independent DBSQL reconciliation: it's the *only* one of 42 tables either `dbxconv` target still
-  disagrees with SDP on, after every other defect was fixed, in both cases. Adding a tie-break (e.g.
-  `stock_code`, `stock_code_b`) is a change to the source logic and should be agreed first.
+  disagrees with SDP on, after every other defect was fixed, in both cases. Checked directly, not assumed: the
+  DataStage source's own Sort stage declares exactly one key (`pair_count desc`, `switch_input/J19_Mart_Basket_Affinity.txt`),
+  no secondary key at all, and the cutoff boundary value (`pair_count = 14` in the live DBSQL deployment) has
+  124 candidate rows sharing it -- a genuine, substantial tie, not a one-row coincidence, so there is no
+  "missing key `dbxconv` dropped" to restore; the ambiguity is in the original job design itself. Adding a
+  tie-break (e.g. `stock_code`, `stock_code_b`) would make the result deterministic, but it's new business
+  logic, not a converter fix, and it would have to land identically in all four implementations (compiled,
+  Switch, SDP, and both `dbxconv` targets) to make them agree again -- that's a product decision about what
+  "the correct top 1000 pairs" means on a tie, and should be agreed first, not made unilaterally by whichever
+  implementation happens to be reconciled last.
 - **SDP files with invented defaults.** 20 of the 21 SDP files still contain the `src_dir` defaults added by
   Switch's fix-up step (§7.4). Regenerate them with `max_fix_attempts: 0`.
 - **Input-order surrogate keys** (`store_sk`, `employee_sk`, `promo_sk`) depend on file read order. Consider
