@@ -87,7 +87,8 @@ lakebridge_workflow/
 │   ├── plan_migration_batch.py
 │   ├── transpile_batch.py
 │   ├── run_dbxconv.py
-│   └── fix_dbxconv_output.py    # patches dbxconv's output so it actually runs (14 defects)
+│   ├── fix_dbxconv_output.py    # patches dbxconv's SPARKSQL output so it actually runs (14 defects)
+│   └── fix_dbxconv_dbsql_output.py  # patches dbxconv's DBSQL output's 5 textual defects (not yet runnable -- see its docstring)
 └── dist/                        # built wheel artifacts
 ```
 
@@ -377,6 +378,7 @@ lakebridge-workflow build-hierarchy --input-json <report-prefix>.json --out-pref
 lakebridge-workflow optimize --input-json <report-prefix>.json --out-prefix <optimization-report-prefix>
 lakebridge-workflow triage-for-switch --optimization-json <optimization-report>.json --condensed-dir <condensed-dir> --out-dir <triaged-dir> --dry-run
 lakebridge-workflow fix-dbxconv --dbxconv-dir <run-dbxconv-output> --condensed-dir <condensed-dir> --catalog <catalog> --schema <schema> --out-dir <fixed-dir>
+lakebridge-workflow fix-dbxconv-dbsql --dbxconv-dir <run-dbxconv-output-dbsql-target> --condensed-dir <condensed-dir> --out-dir <fixed-dir>
 lakebridge-workflow plan --num-jobs <target-new-items> --dry-run
 lakebridge-workflow transpile `
   --num-jobs <target-new-items> `
@@ -761,8 +763,59 @@ validation's job graph needs and initially omitted), and the reconciliation resu
 the SDP implementation (41 of 42 common tables match; the one holdout is a pre-existing,
 already-documented non-determinism, not a `dbxconv` defect).
 
-Scoped to the SPARKSQL target specifically -- it has not been run against `PYSPARK` or
-`DBSQL` output, which have at least some different defects of their own.
+Scoped to the SPARKSQL target specifically -- it has not been run against `PYSPARK`
+output, which has at least some different defects of its own. `DBSQL` output now has its
+own fixer, below.
+
+## Fixing `dbxconv`'s DBSQL output -- five fixed, two found to be genuinely hard
+
+`DBSQL` is BladeBridge's plain-SQL-script target (§8a.2), meant to run on a Databricks SQL
+Warehouse rather than needing a cluster or serverless Python compute the way the SPARKSQL
+target does. It was never actually exercised end to end until this point -- everything
+above used SPARKSQL. Converting this repository's own 23 jobs with `--target DBSQL` for the
+first time found defects specific to this target (a different translation-table gap, in a
+differently-shaped artifact: one plain `.sql` file per job, no per-stage comments of any
+kind, no `;` between statements):
+
+```powershell
+lakebridge-workflow fix-dbxconv-dbsql `
+  --dbxconv-dir <run-dbxconv's --output directory, converted with --target DBSQL> `
+  --condensed-dir <the same jobs' condensed .txt specs> `
+  --out-dir <fixed-sql-dir>
+```
+
+| # | Fix | What it's for |
+|---|---|---|
+| 1 | `fix_ereplace_calls` | Renames `Ereplace(x, old, new)` to Databricks SQL's `REPLACE` |
+| 2 | `fix_len_calls` | Renames `Len(x)` to Databricks SQL's `LENGTH` |
+| 3 | `fix_string_concat_plus` | Turns DataStage's `:` concatenation operator -- mistranslated as `+` -- into `\|\|`, only on a line whose target column's derivation actually used `:` |
+| 4 | `fix_bare_numeric_cast` | Same defect, same fix, as the SPARKSQL fixer's own version: gives a bare `CAST(x AS numeric)` its real precision/scale |
+| 5 | `fix_date_format_pattern_case` | Same defect, same fix, as the SPARKSQL fixer's own version: re-lowercases an all-upper-case `date_format()` pattern |
+
+A separate module from the SPARKSQL fixer on purpose, not a shared one with a target flag:
+a DBSQL defect is a different gap in BladeBridge's own DBSQL config, in a text shape with
+none of SPARKSQL's structure (no per-stage comments, no notebook cells, no Python at all)
+to anchor on -- conflating the two would make both harder to reason about for no benefit.
+
+**This does not make DBSQL output runnable.** Two separate problems remain, both
+investigated and found to be genuinely hard rather than just unexplored -- see the full
+writeup in `migration/README.md` §8d for the evidence:
+
+1. No `;` between statements, and nothing names any intermediate result, so a later
+   statement's `FROM <link>` references a name no earlier statement ever defines. Three
+   different heuristics for recovering which statement belongs to which DataStage link
+   (file position, column-alias matching, `FROM`-target cross-referencing) were tried
+   against this repository's own SCD2 job; none held across the whole file, because of a
+   `PxCopy` stage's ambiguous output, a link with no matching statement at all, and a
+   third statement shape (`SELECT CONCAT_WS(...)`, a file/audit target's own row-dump)
+   neither heuristic accounts for.
+2. Every source read has a completely blank `FROM` clause and no column qualifier (a bare
+   `.CustomerID`). The read mechanism itself works (`read_files('<path>', format =>
+   'csv', header => false)`, confirmed against a live SQL Warehouse), but resolving a
+   blank reference to the right source by field name turns out to be unsafe: most
+   multi-source jobs in this repository reuse the same field name across multiple
+   unrelated sources, confirmed by checking every job for collisions first. A silently
+   wrong source is worse than the current clean failure.
 
 ## Validation
 

@@ -32,6 +32,40 @@ COL_RE = re.compile(r"^col\s+(\S+)\s+sql=(\S+)\s+prec=(\S+),(\S+)\s+nullable=(\S
 PARAM_RE = re.compile(r"^\s*-\s+(\S+)(?:\s+\(default\s+(.*?)\))?(?:\s*:\s*(.*))?$")
 BACKUP_RE = re.compile(r"(?:^copyof|_(?:orig|old|bak|bkp|test)$)", re.IGNORECASE)
 
+# JDBC/ODBC SQL type codes for character data (CHAR, VARCHAR, LONGVARCHAR, and their
+# national-character variants) -- the condensed job's "sql=" column attribute uses these
+# directly (e.g. "col region sql=12 ... nullable=0"), so this is source-agnostic, not tied
+# to this pipeline's own columns or to any one dbxconv output target.
+STRING_SQL_TYPES = {1, 12, -1, -9, -15, -16}
+
+# JDBC/ODBC SQL type codes for numeric data, mapped to a Spark type/cast expression. DECIMAL
+# and NUMERIC (2, 3) use the column's own declared precision/scale; everything else maps to
+# a fixed Spark type.
+NUMERIC_SQL_TYPE_NAMES = {4: "int", -5: "bigint", 5: "smallint", -6: "tinyint",
+                          6: "double", 7: "double", 8: "double"}
+DECIMAL_SQL_TYPES = {2, 3}
+
+# An expression that may contain parens nested up to two levels deep (an argument like
+# `date_add(cast('{pEffDate}' as date),1)` already needs two: the outer date_add(...) call,
+# and the cast(...) nested inside it). A bare `[^,]+`/`[^()]+` for "the first argument"
+# stops at the first comma or paren *anywhere*, including ones that belong to a nested
+# call, not to the top-level argument list -- wrong for any date/timestamp expression a
+# dbxconv output target wraps in more than one function call.
+_PARENS_0 = r"[^()]*"
+_PARENS_1 = rf"(?:[^()]|\({_PARENS_0}\))*"
+BALANCED_EXPR_RE_SRC = rf"(?:[^()]|\({_PARENS_1}\))*"
+
+# The same DataStage-to-Spark date-format token table ds2spark.py's own fmt() helper uses
+# (migration/README.md §2.3), shared by every dbxconv output target's date-format fixes.
+DATE_FORMAT_TOKENS = [("%yyyy", "yyyy"), ("%mm", "MM"), ("%dd", "dd"), ("%hh", "HH"), ("%nn", "mm"), ("%ss", "ss")]
+
+
+def spark_numeric_type(sql_type: Any, precision: Any, scale: Any) -> str | None:
+    """A Spark cast-target type string for a JDBC numeric SQL type code, or None."""
+    if sql_type in DECIMAL_SQL_TYPES:
+        return f"decimal({int(precision) if precision else 18},{int(scale) if scale else 2})"
+    return NUMERIC_SQL_TYPE_NAMES.get(sql_type)
+
 
 @dataclass
 class Link:

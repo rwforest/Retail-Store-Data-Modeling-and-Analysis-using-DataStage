@@ -1,6 +1,6 @@
 ---
 name: datastage-databricks-migration-lessons
-description: Lessons learned migrating DataStage to Databricks in this repo (migration/) -- debugging methodology, BladeBridge/dbxconv's 14 systematic output defects and their generalized fixes, a self-correction lesson about this repo's own fixer tooling (outer-join coalescing), Spark/PySpark/Databricks gotchas, and safety rules for scoping work to an LLM transpiler (Lakebridge Switch). Use before touching dbxconv/BladeBridge conversion output, fix_dbxconv_output.py, triage_for_switch.py, optimize.py, or common.py; before debugging a DataStage-derived Spark job that runs but produces wrong data, or one that fails with an opaque platform error; before deploying/reconciling two independently-produced implementations of the same pipeline; or before deciding what to send to an LLM-based transpiler at scale.
+description: Lessons learned migrating DataStage to Databricks in this repo (migration/) -- debugging methodology, BladeBridge/dbxconv's systematic output defects and their generalized fixes for both its SPARKSQL target (14 defects, fully fixed and deployed) and its DBSQL target (5 textual defects fixed; two deeper structural problems investigated and found genuinely hard, not yet fixed -- know this before attempting them again), a self-correction lesson about this repo's own fixer tooling (outer-join coalescing), Spark/PySpark/Databricks gotchas, and safety rules for scoping work to an LLM transpiler (Lakebridge Switch). Use before touching dbxconv/BladeBridge conversion output (either target), fix_dbxconv_output.py, fix_dbxconv_dbsql_output.py, triage_for_switch.py, optimize.py, or common.py; before debugging a DataStage-derived Spark/SQL job that runs but produces wrong data, or one that fails with an opaque platform error; before deploying/reconciling two independently-produced implementations of the same pipeline; before building a name-based fix over a condensed job model with multiple similarly-shaped sources; or before deciding what to send to an LLM-based transpiler at scale.
 ---
 
 # DataStage -> Databricks migration: lessons learned
@@ -14,8 +14,9 @@ model in `lakebridge_workflow/src/lakebridge_workflow/common.py`
 first -- every fixer/analyzer in this package parses jobs the same way; don't invent a second
 parser.
 
-Full writeups: `migration/README.md` §8c (dbxconv's 14 defects, deployment, reconciliation),
-§7.3-7.4 (SDP lessons), §6 (reconciliation caveats), §8 (open items);
+Full writeups: `migration/README.md` §8c (dbxconv SPARKSQL target's 14 defects, deployment,
+reconciliation), §8d (dbxconv DBSQL target's 5 fixed defects and the 2 found genuinely
+hard), §7.3-7.4 (SDP lessons), §6 (reconciliation caveats), §8 (open items);
 `migration/lakebridge_workflow/README.md` (per-tool docs, complexity/optimization scoring).
 This skill is the condensed, reusable version -- read the README sections above for full
 narrative and numbers.
@@ -83,6 +84,44 @@ narrative and numbers.
   separate from your own scripts**, per the sandbox rule -- e.g. the BladeBridge plugin wheel
   was extracted into an isolated `/tmp/bb_work/` directory, never alongside this package's
   source.
+- **`pip`/`uv install` a plugin properly instead of manually extracting its wheel** -- manual
+  extraction (`python -m zipfile -e`) only unzips that one wheel's own files; it skips
+  dependency resolution entirely, so a declared dependency (`psutil>=7.0.0`, in this case)
+  is silently missing and only fails later, inside whatever code path actually imports it.
+  `uv venv <dir> && uv pip install --python <dir>/bin/python <package>` resolves and
+  installs every dependency into one `site-packages`; `--plugin-dir` pointed at that
+  `site-packages` root (not a bare extracted wheel) made every dependency importable too,
+  because the code's own `sys.path.insert(0, plugin_root)` adds the whole directory, not
+  just the one package. (`uv tool install` doesn't work for a library-only package with no
+  CLI entry point -- it resolves dependencies fine, then deletes the whole environment
+  anyway because there's nothing to expose on `PATH`.)
+- **Validate one isolated mechanism against the real engine even when the whole script can't
+  run yet.** DBSQL's raw output isn't executable end to end (no semicolons, no named
+  intermediate results), but that didn't block checking whether `read_files('<path>', format
+  => 'csv', header => false)` -- the one new piece of syntax a source-read fix would need --
+  actually works on a live SQL Warehouse. It does, and confirmed the exact column-naming
+  convention (`_c0`, `_c1`, ...) before any fix was written around it. Test the smallest
+  real thing you can, even inside a bigger problem that's still unsolved.
+- **When a generator leaves no structural markers, don't trust one heuristic for "which
+  output belongs to which input" -- verify it holds across the whole file before building
+  on it.** DBSQL's statements have no per-stage comments (unlike SPARKSQL's notebooks).
+  Three different ways of matching a statement back to its DataStage stage -- file
+  position, the statement's own column-alias list, and its `FROM` target against the
+  stage's declared in-links -- each looked right on the first few statements and broke
+  down later in the same file (a `PxCopy` stage's ambiguous two-output duplication, a link
+  with no matching statement anywhere, a target/audit stage's row-dump statement neither
+  heuristic accounts for). Confirm a correspondence holds for the *entire* file, not the
+  first plausible-looking match, before writing a fix that depends on it.
+- **Before matching anything by name across a condensed job model, check for collisions
+  first.** A fix that resolves an ambiguous reference by field/column name is only as safe
+  as that name being unique within its own scope. Checking every job in this repository for
+  raw-field-name collisions across its distinct external sources (before writing a
+  source-reference fix, not after it broke) found that *most* multi-source jobs reuse the
+  same field name (`customer_id`, `country`, `stock_code`, ...) across two or more unrelated
+  sources -- confirming a name-based match would silently resolve to the wrong source for a
+  large fraction of occurrences, before any code was written to do that. A confidently wrong
+  result from a plausible-looking heuristic is worse than leaving the defect unfixed and
+  documented.
 
 ## BladeBridge `dbxconv`'s 14 systematic output defects (SPARKSQL target)
 
@@ -114,10 +153,45 @@ debugging-methodology bullet above ("a fixer that defaults NULL-to-something can
 NULL a later stage still needs") for the full lesson; `outer_join_nullable_links` in
 `fix_dbxconv_output.py` is the fix.
 
-**Scope note:** this fixer targets the SPARKSQL `dbxconv` target only. PYSPARK/DBSQL targets
-have at least some different defects (a bare unquoted `sep` identifier, a write path missing
-its `f`-string prefix, seen but not pursued) -- don't assume the same 14 fixes apply unchanged
-if you switch targets; re-derive from scratch by reading that target's generated code first.
+**Scope note:** this fixer targets the SPARKSQL `dbxconv` target only. PYSPARK target output
+has at least some different defects of its own (a bare unquoted `sep` identifier, a write
+path missing its `f`-string prefix, seen but not pursued) -- don't assume these 14 fixes
+apply unchanged if you switch targets; re-derive from scratch by reading that target's
+generated code first. DBSQL target output now has its own fixer, below.
+
+## BladeBridge `dbxconv`'s DBSQL target: 5 fixed, 2 found to be genuinely hard
+
+Fixed in [`fix_dbxconv_dbsql_output.py`](../../migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_dbsql_output.py)
+(`lakebridge-workflow fix-dbxconv-dbsql`) -- a **separate module** from the SPARKSQL fixer on
+purpose, not a shared one with a target flag: DBSQL's raw output is a plain `.sql` script
+with no per-stage comments, no notebook cells, no Python at all -- a fundamentally different
+shape, not a variant of SPARKSQL's. Full table and evidence: README §8d.
+
+1. `Ereplace(x, old, new)` (DataStage's string-replace) is left untranslated -- not a real Databricks SQL function. Renamed to `REPLACE`.
+2. `Len(x)` is left untranslated the same way. Renamed to `LENGTH`.
+3. DataStage's `:` string-concatenation operator becomes a literal `+` (`A + '|' + B` instead of `A || '|' || B`) -- wrong under ANSI mode once a term isn't numeric-coercible. Fixed only on a line whose target column's own derivation actually used `:`, with the fix's `+`-count checked against the derivation's `:`-count first, so a genuinely numeric `+` elsewhere on the same line is never touched.
+4. `StringToDecimal(x)` becomes a bare `CAST(x AS numeric)` -- same `DECIMAL(10,0)` defect as the SPARKSQL fixer's own #12, reproduced identically.
+5. `date_format()` patterns are all upper-case -- same defect as the SPARKSQL fixer's own #9, reproduced identically.
+
+**Two things investigated at length and deliberately left unfixed, not just unexplored:**
+
+- **No `;` between statements, and nothing names any intermediate result** -- a later
+  statement's `FROM <link>` references a name no earlier statement defines. Recovering
+  which statement belongs to which DataStage link (needed to wrap each one in a named view)
+  was tried three ways against this repo's own SCD2 job -- file position, column-alias-list
+  matching, `FROM`-target-vs-declared-in-links cross-referencing -- and none held across the
+  whole file (see the debugging-methodology bullet above on verifying a correspondence holds
+  for the entire file).
+- **Every source read has a completely blank `FROM` and no column qualifier** (a bare
+  `.CustomerID`). The read mechanism itself is confirmed working (`read_files('<path>',
+  format => 'csv', header => false)` on a live SQL Warehouse). Resolving *which* source a
+  blank reference belongs to by field name is unsafe: checking for collisions first (see the
+  debugging-methodology bullet above) found most multi-source jobs in this repo reuse the
+  same field name across unrelated sources.
+
+Both need real knowledge of dbxconv's own statement-emission rules, or carefully isolated
+single-stage test jobs built to observe it cleanly -- not a pattern-matching guess against
+this pipeline's own, ambiguous output.
 
 ## Spark / PySpark / Databricks gotchas (general, not dbxconv-specific)
 
@@ -194,13 +268,18 @@ candidate's correctness depends on sibling jobs before marking it independently 
 - `migration/lakebridge_workflow/src/lakebridge_workflow/triage_for_switch.py` -- scopes the
   expensive LLM pass; enforces the SCD2 bundling-safety rule above.
 - `migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_output.py` -- the 14-defect
-  fixer described above.
+  SPARKSQL-target fixer described above.
+- `migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_dbsql_output.py` -- the
+  5-fix DBSQL-target fixer; its own module docstring has the full, evidenced writeup of the
+  two deeper problems it deliberately doesn't attempt.
 - `migration/lakebridge_workflow/src/lakebridge_workflow/run_dbxconv.py` -- invokes the
   BladeBridge `dbxconv` binary (installed via `pip`/`uv` as the `databricks-bb-plugin` package,
-  not a manual download).
-- `migration/dbxconv_output_fixed/` -- the 23 fixed/deployed notebooks, job spec (24 tasks --
-  includes `promote_dim_customer`), reconciliation notebook and result (41/42 tables match;
-  the one holdout is `basket_affinity`'s pre-existing tie-break non-determinism), checked in
-  as evidence (same convention as `switch_output*/`).
-- `migration/README.md` §8c -- full narrative, numbers, and the "what this does and doesn't
-  prove" framing to reuse when reporting any reconciliation result.
+  not a manual download -- see the pip/uv-install debugging-methodology bullet above).
+- `migration/dbxconv_output_fixed/` -- the 23 fixed/deployed SPARKSQL notebooks, job spec (24
+  tasks -- includes `promote_dim_customer`), reconciliation notebook and result (41/42 tables
+  match; the one holdout is `basket_affinity`'s pre-existing tie-break non-determinism),
+  checked in as evidence (same convention as `switch_output*/`).
+- `migration/dbxconv_dbsql_output_fixed/` -- the 24 fixed (but not yet runnable) DBSQL `.sql`
+  files and fix report, checked in as evidence of what is and isn't fixed so far.
+- `migration/README.md` §8c (SPARKSQL) / §8d (DBSQL) -- full narrative, numbers, and the "what
+  this does and doesn't prove" framing to reuse when reporting any reconciliation result.

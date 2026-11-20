@@ -1,0 +1,204 @@
+{
+  "summary": {
+    "jobsPatched": 24,
+    "totalEreplaceCalls": 3,
+    "totalLenCalls": 3,
+    "totalStringConcats": 28,
+    "totalBareNumericCasts": 5,
+    "totalDateFormatCases": 4
+  },
+  "jobs": [
+    {
+      "job": "J01_Land_Orders",
+      "ereplaceCalls": 0,
+      "lenCalls": 2,
+      "stringConcats": 0,
+      "bareNumericCasts": 3,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J02_Land_Customers",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 28,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J03_Land_Products",
+      "ereplaceCalls": 0,
+      "lenCalls": 1,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J04_Land_Stores_Employees",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J05_Dim_Customer_Initial",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J06_Dim_Customer_SCD2",
+      "ereplaceCalls": 2,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 2,
+      "dateFormatCases": 1
+    },
+    {
+      "job": "J07_Dim_Product",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J08_Dim_Store_Employee",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J09_Dim_Date_Promo_FX",
+      "ereplaceCalls": 1,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 3
+    },
+    {
+      "job": "J10_Fact_Sales",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J11_Fact_Returns",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J12_Fact_Invoice",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J13_Mart_RETAIL_DATA_MART",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J14_Analysis_Employee_Transactions",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J15_Analysis_CustomerType_Profit",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J16_Bonus_Program",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J17_Mart_Customer_360",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J18_Mart_Product_Performance",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J19_Mart_Basket_Affinity",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J20_Mart_Store_Monthly",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J21_Mart_Promo_Effectiveness",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J22_DQ_Fact_Checks",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "J23_Reconcile_Source_To_Fact",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    },
+    {
+      "job": "Seq_Retail_DW_Master",
+      "ereplaceCalls": 0,
+      "lenCalls": 0,
+      "stringConcats": 0,
+      "bareNumericCasts": 0,
+      "dateFormatCases": 0
+    }
+  ]
+}

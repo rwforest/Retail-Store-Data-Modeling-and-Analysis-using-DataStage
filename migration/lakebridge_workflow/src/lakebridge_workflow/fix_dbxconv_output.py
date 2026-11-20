@@ -158,7 +158,9 @@ from pathlib import Path
 from typing import Any
 
 from .common import (
-    CondensedJob, Stage, atomic_json, csv_escape, read_condensed_job, unwrap_dsx_value,
+    BALANCED_EXPR_RE_SRC, DATE_FORMAT_TOKENS, DECIMAL_SQL_TYPES, NUMERIC_SQL_TYPE_NAMES,
+    STRING_SQL_TYPES, CondensedJob, Stage, atomic_json, csv_escape, read_condensed_job,
+    spark_numeric_type, unwrap_dsx_value,
 )
 
 # --- Stage-kind classification -----------------------------------------------------------
@@ -176,33 +178,10 @@ JOIN_KIND_RE = re.compile(r"join", re.IGNORECASE)
 # see common.unwrap_dsx_value for the single-value case this is the multi-value cousin of).
 SORT_KEY_NAME_RE = re.compile(r"\\\(1\)\\\(3\)key\\\(2\)(\w+)")
 
-# JDBC/ODBC SQL type codes for character data (CHAR, VARCHAR, LONGVARCHAR, and their
-# national-character variants) -- the condensed job's "sql=" column attribute uses these
-# directly (e.g. "col region sql=12 ... nullable=0"), so this is source-agnostic, not tied
-# to this pipeline's own columns.
-STRING_SQL_TYPES = {1, 12, -1, -9, -15, -16}
-
-# JDBC/ODBC SQL type codes for numeric data, mapped to a Spark type/cast expression. DECIMAL
-# and NUMERIC (2, 3) use the column's own declared precision/scale; everything else maps to
-# a fixed Spark type.
-NUMERIC_SQL_TYPE_NAMES = {4: "int", -5: "bigint", 5: "smallint", -6: "tinyint",
-                          6: "double", 7: "double", 8: "double"}
-DECIMAL_SQL_TYPES = {2, 3}
-
 # The same DSX encoding ds2spark.py's st_agg already parses for an Aggregator's "reduce"
 # property: a source column name, followed by one or more (function, output column) pairs.
 AGGREGATOR_REDUCE_SOURCE_RE = re.compile(r"reduce\\\(2\)(\w+)\\\(2\)0((?:\\\(1\)\\\(3\)\\\(3\)\w+\\\(2\)\w+\\\(2\)0)+)")
 AGGREGATOR_REDUCE_FUNC_RE = re.compile(r"\\\(3\)\\\(3\)(\w+)\\\(2\)(\w+)\\\(2\)0")
-
-# An expression that may contain parens nested up to two levels deep (an argument like
-# `date_add(cast('{pEffDate}' as date),1)` already needs two: the outer date_add(...) call,
-# and the cast(...) nested inside it). A bare `[^,]+`/`[^()]+` for "the first argument"
-# stops at the first comma or paren *anywhere*, including ones that belong to a nested
-# call, not to the top-level argument list -- wrong for any date/timestamp expression this
-# generated code wraps in more than one function call.
-_PARENS_0 = r"[^()]*"
-_PARENS_1 = rf"(?:[^()]|\({_PARENS_0}\))*"
-BALANCED_EXPR_RE_SRC = rf"(?:[^()]|\({_PARENS_1}\))*"
 
 # The derivation text for a TimestampToString(..., "<format>") column; the same token table
 # ds2spark.py's own fmt() helper uses (migration/README.md §2.3) converts DataStage's format
@@ -211,7 +190,6 @@ BALANCED_EXPR_RE_SRC = rf"(?:[^()]|\({_PARENS_1}\))*"
 TIMESTAMP_TO_STRING_DERIVATION_RE = re.compile(
     rf'TimestampToString\(({BALANCED_EXPR_RE_SRC}),\s*"([^"]+)"\)'
 )
-DATE_FORMAT_TOKENS = [("%yyyy", "yyyy"), ("%mm", "MM"), ("%dd", "dd"), ("%hh", "HH"), ("%nn", "mm"), ("%ss", "ss")]
 
 # Any date_format(expr, '<pattern>') call, wherever it appears and however deeply it's
 # nested inside other wrapping calls (REGEXP_REPLACE, CAST, ...) -- a DateToString(date,
@@ -664,13 +642,6 @@ def fix_nonnullable_string_coalesce(code: str, job: CondensedJob) -> tuple[str, 
                 code, n = pattern.subn(repl, code)
                 count += n
     return code, count
-
-
-def spark_numeric_type(sql_type: Any, precision: Any, scale: Any) -> str | None:
-    """A Spark cast-target type string for a JDBC numeric SQL type code, or None."""
-    if sql_type in DECIMAL_SQL_TYPES:
-        return f"decimal({int(precision) if precision else 18},{int(scale) if scale else 2})"
-    return NUMERIC_SQL_TYPE_NAMES.get(sql_type)
 
 
 def fix_bare_numeric_cast(code: str, job: CondensedJob) -> tuple[str, int]:

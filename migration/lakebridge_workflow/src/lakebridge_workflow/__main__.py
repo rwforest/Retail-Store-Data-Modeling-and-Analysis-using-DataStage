@@ -13,6 +13,7 @@ COMMAND_MODULES = {
     "analyze-parallel": "analyze_parallel",
     "build-hierarchy": "build_hierarchy",
     "fix-dbxconv": "fix_dbxconv_output",
+    "fix-dbxconv-dbsql": "fix_dbxconv_dbsql_output",
     "merge-reports": "merge_reports",
     "migrate": "migrate",
     "optimize": "optimize",
