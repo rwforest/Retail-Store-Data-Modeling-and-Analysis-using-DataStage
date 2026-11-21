@@ -1,5 +1,5 @@
 # Databricks notebook source
-# Code converted on 2026-11-19 16:23:20
+# Code converted on 2026-11-20 14:16:03
 import os
 from pyspark.sql import *
 from pyspark.sql.functions import *
@@ -218,7 +218,7 @@ lnk_all.createOrReplaceTempView("lnk_all")
 
 lnk_top50 = spark.sql(f"""
 SELECT * FROM lnk_top_in
-ORDER BY revenue DESC
+ORDER BY revenue DESC, product_sk ASC, units_sold ASC, profit ASC, returned ASC, return_rate ASC, margin_pct ASC, abc_class ASC, stock_code ASC, product_name ASC, category ASC, supplier_name ASC
 LIMIT 50
 """)
 lnk_top50.createOrReplaceTempView("lnk_top50")

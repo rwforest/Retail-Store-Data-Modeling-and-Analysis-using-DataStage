@@ -25,7 +25,7 @@ ORDER BY profit_total desc
 
 CREATE OR REPLACE TEMP VIEW lnk_top100 AS (
   SELECT * FROM lnk_ranked
-  ORDER BY profit_total DESC
+  ORDER BY profit_total DESC, customer_id ASC
   LIMIT 100
 );
 

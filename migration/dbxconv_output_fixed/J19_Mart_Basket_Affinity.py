@@ -1,5 +1,5 @@
 # Databricks notebook source
-# Code converted on 2026-11-19 16:23:37
+# Code converted on 2026-11-20 14:16:35
 import os
 from pyspark.sql import *
 from pyspark.sql.functions import *
@@ -206,7 +206,7 @@ lnk_sorted.createOrReplaceTempView("lnk_sorted")
 
 lnk_top = spark.sql(f"""
 SELECT * FROM lnk_sorted
-ORDER BY pair_count DESC
+ORDER BY pair_count DESC, stock_code ASC, stock_code_b ASC
 LIMIT 1000
 """)
 lnk_top.createOrReplaceTempView("lnk_top")

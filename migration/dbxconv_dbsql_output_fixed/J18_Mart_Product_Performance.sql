@@ -157,7 +157,7 @@ FROM lnk_all;
 
 CREATE OR REPLACE TEMP VIEW lnk_top50 AS (
   SELECT * FROM lnk_top_in
-  ORDER BY revenue DESC
+  ORDER BY revenue DESC, product_sk ASC, units_sold ASC, profit ASC, returned ASC, return_rate ASC, margin_pct ASC, abc_class ASC, stock_code ASC, product_name ASC, category ASC, supplier_name ASC
   LIMIT 50
 );
 

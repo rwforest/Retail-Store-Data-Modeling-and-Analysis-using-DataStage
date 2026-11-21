@@ -175,7 +175,21 @@ def link_order(job: CondensedJob) -> dict[str, str | None]:
 
 
 def sort_order_clause(stage: Stage) -> str:
-    """"col1 DIR1, col2 DIR2, ..." from a Sort stage's DSX-encoded key property."""
+    """"col1 DIR1, col2 DIR2, ..." from a Sort stage's DSX-encoded key property.
+
+    Appends every other column the stage's own out-link declares, in its declared order,
+    as an ``ASC`` tie-break after the stage's explicit key(s) -- a DataStage Sort commonly
+    declares only the column(s) its *intended* ranking needs (a single `pair_count DESC`
+    ahead of a Top-N Head stage, for example), leaving a genuine tie at that Head's cutoff
+    to an arbitrary physical row order that can differ from run to run and between
+    independently-built implementations of the same job (confirmed live: a tie-break-less
+    Top-1000 had 124 rows sharing the exact cutoff value). Adding the stage's own remaining
+    declared columns never changes a row's rank unless it was tied in the first place --
+    there was no "correct" order among tied rows to disturb -- and makes which tied rows
+    survive a later cutoff reproducible instead of non-deterministic, generically, from
+    whatever columns this stage's own schema already has, not any one job's specific
+    column names.
+    """
     raw = stage.prop_map.get("key", "")
     keys = SORT_KEY_NAME_RE.findall(raw)
     parts = []
@@ -183,6 +197,14 @@ def sort_order_clause(stage: Stage) -> str:
         m = re.search(rf"key\\\(2\){re.escape(key)}\\\(2\)0(\\\(1\)\\\(3\)\\\(3\)asc\\\\desc\\\(2\)(\w+))?", raw)
         direction = "DESC" if m and m.group(2) == "desc" else "ASC"
         parts.append(f"{key} {direction}")
+    out_links = [lk for lk in stage.links if lk.direction == "out"]
+    if out_links:
+        seen = set(keys)
+        for col in out_links[0].columns:
+            name = col.get("name")
+            if name and name not in seen:
+                seen.add(name)
+                parts.append(f"{name} ASC")
     return ", ".join(parts)
 
 

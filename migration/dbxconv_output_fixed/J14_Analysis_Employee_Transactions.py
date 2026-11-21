@@ -1,5 +1,5 @@
 # Databricks notebook source
-# Code converted on 2026-11-19 16:22:13
+# Code converted on 2026-11-20 14:14:24
 import os
 from pyspark.sql import *
 from pyspark.sql.functions import *
@@ -208,7 +208,7 @@ lnk_all.createOrReplaceTempView("lnk_all")
 
 lnk_top10 = spark.sql(f"""
 SELECT * FROM lnk_top_in
-ORDER BY store_sk ASC, total_transactions DESC
+ORDER BY store_sk ASC, total_transactions DESC, employee_sk ASC, employee_id ASC, employee_name ASC, role ASC
 LIMIT 10
 """)
 lnk_top10.createOrReplaceTempView("lnk_top10")

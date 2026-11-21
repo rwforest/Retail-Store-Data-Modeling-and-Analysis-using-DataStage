@@ -1,5 +1,5 @@
 # Databricks notebook source
-# Code converted on 2026-11-19 16:22:46
+# Code converted on 2026-11-20 14:15:10
 import os
 from pyspark.sql import *
 from pyspark.sql.functions import *
@@ -104,7 +104,7 @@ lnk_ranked.createOrReplaceTempView("lnk_ranked")
 
 lnk_top100 = spark.sql(f"""
 SELECT * FROM lnk_ranked
-ORDER BY profit_total DESC
+ORDER BY profit_total DESC, customer_id ASC
 LIMIT 100
 """)
 lnk_top100.createOrReplaceTempView("lnk_top100")

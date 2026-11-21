@@ -159,7 +159,7 @@ FROM lnk_all;
 
 CREATE OR REPLACE TEMP VIEW lnk_top10 AS (
   SELECT * FROM lnk_top_in
-  ORDER BY store_sk ASC, total_transactions DESC
+  ORDER BY store_sk ASC, total_transactions DESC, employee_sk ASC, employee_id ASC, employee_name ASC, role ASC
   LIMIT 10
 );
 

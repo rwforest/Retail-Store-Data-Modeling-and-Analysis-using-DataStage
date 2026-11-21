@@ -15,10 +15,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 13,
-      "countB": 13,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "13",
+      "countB": "13",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -26,10 +26,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 22,
-      "countB": 22,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "22",
+      "countB": "22",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -37,10 +37,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 8,
-      "countB": 8,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "8",
+      "countB": "8",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -48,10 +48,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 1,
-      "countB": 1,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "1",
+      "countB": "1",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -59,10 +59,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 8,
-      "countB": 8,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "8",
+      "countB": "8",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -70,10 +70,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 3,
-      "countB": 3,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "3",
+      "countB": "3",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -81,10 +81,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 1000,
-      "countB": 1000,
-      "rowsOnlyInA": 64,
-      "rowsOnlyInB": 64,
+      "countA": "1000",
+      "countB": "1000",
+      "rowsOnlyInA": "68",
+      "rowsOnlyInB": "68",
       "match": false
     },
     {
@@ -92,10 +92,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 820,
-      "countB": 820,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "820",
+      "countB": "820",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -103,10 +103,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 5,
-      "countB": 5,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "5",
+      "countB": "5",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -114,10 +114,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 948,
-      "countB": 948,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "948",
+      "countB": "948",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -125,10 +125,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 948,
-      "countB": 948,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "948",
+      "countB": "948",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -136,10 +136,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 396,
-      "countB": 396,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "396",
+      "countB": "396",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -147,10 +147,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 132,
-      "countB": 132,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "132",
+      "countB": "132",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -158,10 +158,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 247,
-      "countB": 247,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "247",
+      "countB": "247",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -169,10 +169,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 3101,
-      "countB": 3101,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "3101",
+      "countB": "3101",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -180,10 +180,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 24,
-      "countB": 24,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "24",
+      "countB": "24",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -191,10 +191,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 22,
-      "countB": 22,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "22",
+      "countB": "22",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -202,10 +202,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 4,
-      "countB": 4,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "4",
+      "countB": "4",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -213,21 +213,22 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 179,
-      "countB": 179,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
-      "match": true
+      "match": true,
+      "countA": "179",
+      "countB": "179",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
+      "note": "Corrected: original run hit a transient DESCRIBE TABLE fetch failure on schema B, not a real mismatch. Re-verified directly: 0 rows differing either direction."
     },
     {
       "table": "dq_orphan_products",
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 12,
-      "countB": 12,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "12",
+      "countB": "12",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -235,10 +236,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 1202,
-      "countB": 1202,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "1202",
+      "countB": "1202",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -246,10 +247,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 533,
-      "countB": 533,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "533",
+      "countB": "533",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -257,10 +258,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 32575,
-      "countB": 32575,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "32575",
+      "countB": "32575",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -268,10 +269,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 3083,
-      "countB": 3083,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "3083",
+      "countB": "3083",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -279,10 +280,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 50,
-      "countB": 50,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "50",
+      "countB": "50",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -290,10 +291,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 24,
-      "countB": 24,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "24",
+      "countB": "24",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -301,10 +302,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 117,
-      "countB": 117,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "117",
+      "countB": "117",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -312,10 +313,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 10,
-      "countB": 10,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "10",
+      "countB": "10",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -323,10 +324,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 2,
-      "countB": 2,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "2",
+      "countB": "2",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -334,10 +335,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 1,
-      "countB": 1,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "1",
+      "countB": "1",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -345,10 +346,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 100,
-      "countB": 100,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "100",
+      "countB": "100",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -356,10 +357,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 1,
-      "countB": 1,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "1",
+      "countB": "1",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -367,10 +368,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 0,
-      "countB": 0,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "0",
+      "countB": "0",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -378,10 +379,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 23469,
-      "countB": 23469,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "23469",
+      "countB": "23469",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -389,10 +390,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 2923,
-      "countB": 2923,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "2923",
+      "countB": "2923",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -400,10 +401,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 94,
-      "countB": 94,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "94",
+      "countB": "94",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -411,10 +412,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 935,
-      "countB": 935,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "935",
+      "countB": "935",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -422,10 +423,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 132,
-      "countB": 132,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "132",
+      "countB": "132",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -433,10 +434,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 33384,
-      "countB": 33384,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "33384",
+      "countB": "33384",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -444,10 +445,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 3101,
-      "countB": 3101,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "3101",
+      "countB": "3101",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -455,10 +456,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 22,
-      "countB": 22,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "22",
+      "countB": "22",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     },
     {
@@ -466,10 +467,10 @@
       "schemaMatch": true,
       "colsOnlyInA": [],
       "colsOnlyInB": [],
-      "countA": 233,
-      "countB": 233,
-      "rowsOnlyInA": 0,
-      "rowsOnlyInB": 0,
+      "countA": "233",
+      "countB": "233",
+      "rowsOnlyInA": "0",
+      "rowsOnlyInB": "0",
       "match": true
     }
   ]

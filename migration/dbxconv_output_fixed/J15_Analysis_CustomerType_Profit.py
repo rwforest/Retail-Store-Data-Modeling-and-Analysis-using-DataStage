@@ -1,5 +1,5 @@
 # Databricks notebook source
-# Code converted on 2026-11-19 16:22:29
+# Code converted on 2026-11-20 14:14:45
 import os
 from pyspark.sql import *
 from pyspark.sql.functions import *
@@ -101,7 +101,7 @@ lnk_all.createOrReplaceTempView("lnk_all")
 
 lnk_winner = spark.sql(f"""
 SELECT * FROM lnk_win_in
-ORDER BY profit_total DESC
+ORDER BY profit_total DESC, customer_type ASC, sales_total ASC, lines ASC
 LIMIT 1
 """)
 lnk_winner.createOrReplaceTempView("lnk_winner")

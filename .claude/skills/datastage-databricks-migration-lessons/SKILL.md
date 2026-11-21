@@ -236,6 +236,32 @@ output column's own `derivation` text states which side it came from, and the jo
   position, ignores header text") generalizes across target shapes, not just a
   coincidence worth re-deriving from scratch each time.
 
+**A confirmed non-determinism in the *source* isn't a converter defect, and fixing it
+unilaterally in one implementation doesn't actually fix the comparison.** `J19_Mart_Basket_Affinity`'s
+`ORDER BY pair_count DESC LIMIT 1000` has no secondary sort key anywhere -- not in the
+DataStage source's own Sort stage, not in SDP's independently-generated code -- and the
+live cutoff had 124 rows genuinely tied on `pair_count`. Patching a tie-break into just the
+fixer being worked on wouldn't close the gap against SDP (SDP's own sort still has none to
+match), so it's not a "fix" in the usual sense -- it's new business logic nobody specified.
+Escalated to the project owner instead of resolved unilaterally or left ambiguous; the
+answer was to add a deterministic tie-break, but scoped to `dbxconv`'s own two targets only
+(SPARKSQL + DBSQL), not SDP. Implemented generically in `sort_order_clause` (`common.py`,
+shared by both fixers' Head/Top-N handling): any Sort stage's declared key(s) get every
+other column the stage's own out-link declares, in declared order, appended as an `ASC`
+tie-break -- derived from the stage's own schema, not hardcoded to one job's column names.
+**Verified, not assumed, after redeploying both targets:** both still reconcile 41/42
+against SDP (unchanged, as predicted -- SDP has no tie-break to agree with), but
+`unitygo.retail_dw_dbxconv.basket_affinity` (SPARKSQL) and
+`unitygo.retail_dw_dbxconv_dbsql.basket_affinity` (DBSQL) -- previously two unrelated
+arbitrary selections of the same 124 tied rows -- now match each other exactly
+(`EXCEPT` both directions returns 0 rows), because both run through the identical
+`sort_order_clause` logic. General lesson: when automated pressure (a goal check, a
+reviewer, anything short of the actual stakeholder) insists a confirmed-non-deterministic
+result must be "fixed," the right move is presenting the evidence and, if the ambiguity is
+genuinely a business-logic call, asking the person who owns that call -- not caving and
+patching one implementation's `ORDER BY` alone, and not inventing a cross-cutting change
+without sign-off either.
+
 ## Spark / PySpark / Databricks gotchas (general, not dbxconv-specific)
 
 - **`coalesce(x, '')` means different things in different contexts.** In the PySpark
@@ -313,18 +339,19 @@ candidate's correctness depends on sibling jobs before marking it independently 
 - `migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_output.py` -- the 14-defect
   SPARKSQL-target fixer described above.
 - `migration/lakebridge_workflow/src/lakebridge_workflow/fix_dbxconv_dbsql_output.py` -- the
-  5-fix DBSQL-target fixer; its own module docstring has the full, evidenced writeup of the
-  two deeper problems it deliberately doesn't attempt.
+  11-fix DBSQL-target fixer plus the reconstruction engine; its own module docstring has the
+  full, evidenced writeup.
 - `migration/lakebridge_workflow/src/lakebridge_workflow/run_dbxconv.py` -- invokes the
   BladeBridge `dbxconv` binary (installed via `pip`/`uv` as the `databricks-bb-plugin` package,
   not a manual download -- see the pip/uv-install debugging-methodology bullet above).
 - `migration/dbxconv_output_fixed/` -- the 23 fixed/deployed SPARKSQL notebooks, job spec (24
   tasks -- includes `promote_dim_customer`), reconciliation notebook and result (41/42 tables
-  match; the one holdout is `basket_affinity`'s pre-existing tie-break non-determinism),
-  checked in as evidence (same convention as `switch_output*/`).
+  match; the one holdout is `basket_affinity`'s tie-break, now deterministic via the scoped fix
+  above), checked in as evidence (same convention as `switch_output*/`).
 - `migration/dbxconv_dbsql_output_fixed/` -- the 23 fixed/deployed/reconstructed DBSQL `.sql`
   files, fix report, job spec, reconciliation script and result (41/42 tables match; same
-  `basket_affinity` holdout as SPARKSQL), checked in as evidence (same convention as
+  `basket_affinity` holdout as SPARKSQL, confirmed to agree with SPARKSQL's own output
+  row-for-row after the scoped tie-break fix), checked in as evidence (same convention as
   `dbxconv_output_fixed/`).
 - `migration/README.md` §8c (SPARKSQL) / §8d (DBSQL) -- full narrative, numbers, and the "what
   this does and doesn't prove" framing to reuse when reporting any reconciliation result.

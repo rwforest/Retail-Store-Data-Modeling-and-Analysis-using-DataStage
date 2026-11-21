@@ -56,7 +56,7 @@ FROM lnk_all;
 
 CREATE OR REPLACE TEMP VIEW lnk_winner AS (
   SELECT * FROM lnk_win_in
-  ORDER BY profit_total DESC
+  ORDER BY profit_total DESC, customer_type ASC, sales_total ASC, lines ASC
   LIMIT 1
 );
 

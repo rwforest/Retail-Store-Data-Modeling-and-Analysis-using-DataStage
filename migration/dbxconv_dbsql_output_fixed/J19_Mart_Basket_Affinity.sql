@@ -142,7 +142,7 @@ ORDER BY pair_count desc
 
 CREATE OR REPLACE TEMP VIEW lnk_top AS (
   SELECT * FROM lnk_sorted
-  ORDER BY pair_count DESC
+  ORDER BY pair_count DESC, stock_code ASC, stock_code_b ASC
   LIMIT 1000
 );
 

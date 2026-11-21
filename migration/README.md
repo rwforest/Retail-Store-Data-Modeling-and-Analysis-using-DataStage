@@ -870,10 +870,9 @@ and the missing `promote_dim_customer` task were both in place, → 38 once
 `DateFromDaysSince` was fixed, → 41 once the outer-join-coalesce scoping was corrected).
 The one holdout, `basket_affinity`, is the same tie-break non-determinism §7.3 already
 documents as present in every implementation (a single-column `ORDER BY pair_count DESC`
-with no tie-break before `LIMIT 1000`), not a `dbxconv` defect -- fixing it would mean
-changing the source pipeline's own sort logic, the same source-level decision §7.3 and
-Open Items already defer, not something to do unilaterally while reconciling an unrelated
-converter.
+with no tie-break before `LIMIT 1000`), not a `dbxconv` defect. A scoped fix for this --
+deterministic within `dbxconv`'s own two targets, deliberately not closing the gap against
+SDP -- is documented in Open Items, under "Non-deterministic top-N in J19".
 
 What this does and doesn't prove: it's the same kind of result §6's reconciliation is,
 just one step earlier in the pipeline -- two independently-produced implementations
@@ -985,7 +984,11 @@ two SDP-only artifacts §8c's SPARKSQL reconciliation excludes (`dim_customer_hi
 gap). Of 42 common tables, **41 match exactly, 1 still differs** -- the same holdout as
 §8c's: `basket_affinity`, the same tie-break non-determinism §7.3 documents (a single-column
 `ORDER BY pair_count DESC` with no tie-break before `LIMIT 1000`), not a `dbxconv` defect,
-confirmed again independently by this target reaching the exact same outcome.
+confirmed again independently by this target reaching the exact same outcome, and checked
+further here: the cutoff's 124-way tie is real (live query), and SDP's own generated code
+has the identical single-key sort, so there's no incidental tie-break in SDP to discover
+and match either. A scoped fix -- deterministic within `dbxconv`'s own two targets only,
+not SDP -- is in Open Items.
 
 Two independently-produced DataStage conversions of the same source (dbxconv's literal
 SPARKSQL and DBSQL translations) and an independent LLM-driven rewrite (SDP) now all agree
@@ -1019,19 +1022,37 @@ result are checked in under
 - **Clean first run of the compiled reference.** Needed to reconcile `audit_scd2_customer` against SDP (§7.3).
   It means dropping `dim_customer`, `dim_customer_next` and `audit_scd2_customer` in `retail_dw_compiled` before the
   master job runs. Not done yet: it needs approval, because it deletes tables.
-- **Non-deterministic top-N in J19** (`basket_affinity`): sorted only by `pair_count`, so ties at the cutoff are
+- **Non-deterministic top-N in J19** (`basket_affinity`): sorted only by `pair_count`, so ties at the cutoff were
   arbitrary in every implementation (§7.3) -- confirmed, not just inferred, by both §8c's SPARKSQL reconciliation
-  and §8d's independent DBSQL reconciliation: it's the *only* one of 42 tables either `dbxconv` target still
-  disagrees with SDP on, after every other defect was fixed, in both cases. Checked directly, not assumed: the
-  DataStage source's own Sort stage declares exactly one key (`pair_count desc`, `switch_input/J19_Mart_Basket_Affinity.txt`),
-  no secondary key at all, and the cutoff boundary value (`pair_count = 14` in the live DBSQL deployment) has
-  124 candidate rows sharing it -- a genuine, substantial tie, not a one-row coincidence, so there is no
-  "missing key `dbxconv` dropped" to restore; the ambiguity is in the original job design itself. Adding a
-  tie-break (e.g. `stock_code`, `stock_code_b`) would make the result deterministic, but it's new business
-  logic, not a converter fix, and it would have to land identically in all four implementations (compiled,
-  Switch, SDP, and both `dbxconv` targets) to make them agree again -- that's a product decision about what
-  "the correct top 1000 pairs" means on a tie, and should be agreed first, not made unilaterally by whichever
-  implementation happens to be reconciled last.
+  and §8d's independent DBSQL reconciliation: it was the *only* one of 42 tables either `dbxconv` target
+  disagreed with SDP on, after every other defect was fixed, in both cases. Checked directly, not assumed: the
+  DataStage source's own Sort stage declares exactly one key (`pair_count desc`,
+  `switch_input/J19_Mart_Basket_Affinity.txt`), no secondary key at all, and the cutoff boundary value
+  (`pair_count = 14` in the live DBSQL deployment) had 124 candidate rows sharing it -- a genuine, substantial
+  tie, not a one-row coincidence, and SDP's own generated code (`bundle_sdp/src/pipeline/J19_Mart_Basket_Affinity.py`)
+  sorts by the identical single key, so there's no incidental tie-break anywhere to discover and match either.
+  **Decision (asked of, and made by, the project owner, not inferred):** add a deterministic tie-break, but
+  scoped to `dbxconv`'s two targets only, not to compiled/Switch/SDP -- it makes `dbxconv`'s own SPARKSQL and
+  DBSQL outputs agree with *each other* and become reproducible run to run, at the cost of *not* closing the
+  gap against SDP (SDP's own sort still has none, so the two are expected to keep disagreeing on this one
+  table, now for an explained, deterministic reason instead of an unexplained, non-deterministic one). Fixed
+  generically in `sort_order_clause` (`common.py`, shared by both target fixers' Head/Top-N handling): any Sort
+  stage with a single key gets every other column its own out-link declares, in declared order, appended as an
+  `ASC` tie-break (`pair_count DESC` -> `pair_count DESC, stock_code ASC, stock_code_b ASC` for J19's
+  `srt_Pairs`) -- derived from the stage's own schema, not hardcoded to this job's column names, so it applies
+  the same way to any other Sort-into-Head chain with an underspecified ranking (4 others in this repository:
+  J14/J15/J16/J18, none of which showed a reconciliation mismatch before this change, confirming they had no
+  unresolved ties at their own cutoffs to begin with).
+  **Verified after redeploying both targets:** both `dbxconv_output_fixed/` (SPARKSQL) and
+  `dbxconv_dbsql_output_fixed/` (DBSQL) still reconcile 41/42 against SDP -- unchanged, exactly as predicted,
+  since SDP's own sort still has no tie-break for this one table to agree with. The scoped fix's actual payoff
+  is checked directly, not assumed: `unitygo.retail_dw_dbxconv.basket_affinity` (SPARKSQL) and
+  `unitygo.retail_dw_dbxconv_dbsql.basket_affinity` (DBSQL) -- previously two independent, unrelated-by-construction
+  arbitrary selections of 124 tied rows -- now agree with **each other** exactly (`EXCEPT` both directions
+  returns 0 rows), because both run through the identical `sort_order_clause` tie-break. `basket_affinity`'s
+  mismatch against SDP changed shape too: 124 tied rows at one boundary value became 68 rows differing from SDP
+  on each side (still non-zero, still expected, just a different tie-break produces a different losing/winning
+  split).
 - **SDP files with invented defaults.** 20 of the 21 SDP files still contain the `src_dir` defaults added by
   Switch's fix-up step (§7.4). Regenerate them with `max_fix_attempts: 0`.
 - **Input-order surrogate keys** (`store_sk`, `employee_sk`, `promo_sk`) depend on file read order. Consider
